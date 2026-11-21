@@ -40,21 +40,42 @@ pub enum Mode {
 	Flatbed,
 	/// One side of each sheet, every page kept; a blank one is said to look blank, since it may be face down.
 	Feeder,
-	/// One side of each sheet, leaving out pages with no text (opt-in, since OCR finds none in a photo or a signature).
+	/// One side of each sheet, leaving out blank pages (opt-in): a page with no ink, or whose only ink is show-through from the other side. A page with ink that OCR can't read (a photo, handwriting, another script) is kept.
 	FeederSkip,
-	/// Both sides of each sheet, keeping only the sides with real text, so a one-sided stack, face up or face down, comes out as its printed pages (opt-in).
+	/// Both sides of each sheet, leaving out the blank sides the same way, so a one-sided stack, face up or face down, comes out as its printed pages (opt-in).
 	BothSidesSmart,
 	/// Both sides of each sheet, every one kept: the default for two-sided scanning.
 	BothSidesAll,
 }
 
-/// Fewer plausible words than this and a side of a two-sided scan is taken to be blank: a page number, a speck, or show-through from the printed side.
+/// Fewer plausible words than this and a side reads as having no text: a page number, a speck, or show-through from the printed side.
 const SIDE_TEXT_WORDS: usize = 3;
 
-/// Decided on what OCR read rather than on how dark the side is, since bleed-through can be as dark as faint print. With no OCR engine the darkness is all there is.
+/// Whether OCR found real text on a side. With no OCR engine the ink is all there is to go on.
 #[must_use]
 pub fn side_has_text(read: &ReadPage, page: &DynamicImage) -> bool {
 	if read.error.is_some() { !is_blank(page) } else { read.plausible >= SIDE_TEXT_WORDS }
+}
+
+/// For skipping blank sides: a side with ink is kept unless that ink is show-through, so a page OCR can't read (a photo, a signature, handwriting, a table of figures, a script the OCR language doesn't cover) isn't lost. Show-through is the other side's print seen from behind, mirrored, so it reads as text only when the side is flipped over.
+#[must_use]
+pub fn is_blank_side(read: &ReadPage, page: &DynamicImage, recognize: &mut Recognize<'_>) -> bool {
+	if is_blank(page) {
+		return true;
+	}
+	if side_has_text(read, page) || read.error.is_some() {
+		return false;
+	}
+	reads_mirrored(page, recognize)
+}
+
+type Recognize<'a> = dyn FnMut(&DynamicImage) -> Result<Reading, OcrError> + 'a;
+
+/// Whether the side reads as text once mirrored, the right way up or upside down (a sheet face down in the feeder shows its print through upside down as well).
+fn reads_mirrored(page: &DynamicImage, recognize: &mut Recognize<'_>) -> bool {
+	[page.fliph(), page.flipv()]
+		.iter()
+		.any(|flipped| recognize(flipped).is_ok_and(|(lines, ..)| check::plausible_text(&lines) >= SIDE_TEXT_WORDS))
 }
 
 /// `recognize` reads one image; it's called again for each other orientation tried, only when the page as scanned reads poorly.
@@ -257,6 +278,48 @@ mod tests {
 		let read = read(&page, &mut stand_in(&mut calls));
 		assert!(side_has_text(&read, &page));
 		assert_eq!(read.turn, Some(Turn::Half));
+	}
+
+	/// Ink that reads only when mirrored: the other side's print, seen through the paper. The marker is two pixels at the top right, which only a mirror (not a turn) brings to the top left in the same order.
+	fn mirrored_print(marked: bool) -> DynamicImage {
+		let mut image = GrayImage::from_pixel(850, 1100, Luma([240]));
+		for y in (100..1000).step_by(30) {
+			for x in 100..750 {
+				for dy in 0..10 {
+					image.put_pixel(x, y + dy, Luma([20]));
+				}
+			}
+		}
+		if marked {
+			image.put_pixel(849, 0, Luma([0]));
+			image.put_pixel(848, 0, Luma([100]));
+		}
+		DynamicImage::ImageLuma8(image)
+	}
+
+	/// Reads a paragraph only when the two-pixel marker is at the top left.
+	#[allow(clippy::unnecessary_wraps, reason = "stands in for the OCR engine, which can fail")]
+	fn mirror_aware(image: &DynamicImage) -> Result<Reading, OcrError> {
+		let gray = image.to_luma8();
+		let readable = gray.get_pixel(0, 0).0[0] == 0 && gray.get_pixel(1, 0).0[0] == 100;
+		let text = if readable { PARAGRAPH } else { "' . ~ l1 ," };
+		Ok((words(text, 2.0), image.width(), image.height()))
+	}
+
+	#[test]
+	fn show_through_is_a_blank_side_but_a_page_ocr_cannot_read_is_not() {
+		let mut engine = mirror_aware;
+		let page = mirrored_print(true);
+		let read = read(&page, &mut engine);
+		assert_eq!(read.turn, None, "no turn reads it");
+		assert!(!side_has_text(&read, &page));
+		assert!(is_blank_side(&read, &page, &mut engine), "mirrored, it reads: show-through");
+		// The same ink that reads as nothing any way: a photo, handwriting or another script, kept.
+		let photo = mirrored_print(false);
+		let read = super::read(&photo, &mut engine);
+		assert!(!is_blank_side(&read, &photo, &mut engine));
+		let blank = DynamicImage::ImageLuma8(GrayImage::from_pixel(850, 1100, Luma([240])));
+		assert!(is_blank_side(&ReadPage::default(), &blank, &mut engine));
 	}
 
 	#[test]
