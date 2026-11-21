@@ -212,10 +212,28 @@ pub fn cut_off_edges(lines: &[RecognizedLine], width: u32, height: u32) -> Edges
 	edges
 }
 
+/// A word with at least two letters, mostly letters (a script's combining marks, such as the Indic virama, count with its letters), or a group of at least three digits, as in a table of figures ("12,340.50"), which has no letters at all.
 fn is_plausible(word: &str) -> bool {
 	let letters = word.chars().filter(|c| c.is_alphabetic()).count();
+	let marks = word.chars().filter(|c| !c.is_alphabetic() && is_mark(*c)).count();
+	let digits = word.chars().filter(char::is_ascii_digit).count();
 	let total = word.chars().count();
-	letters >= 2 && letters * 10 >= total * 7
+	(letters >= 2 && (letters + marks) * 10 >= total * 7) || (digits >= 3 && digits * 10 >= total * 6)
+}
+
+/// Combining marks that Unicode doesn't call alphabetic but that are part of a word: the virama, nukta and similar signs of the Indic scripts, Hebrew points, Arabic harakat, and the general combining blocks.
+fn is_mark(c: char) -> bool {
+	let code = u32::from(c);
+	matches!(
+		code,
+		0x0300..=0x036F // combining diacritical marks
+			| 0x0483..=0x0489 // Cyrillic
+			| 0x0591..=0x05C7 // Hebrew points and accents
+			| 0x0610..=0x061A | 0x064B..=0x065F | 0x0670 | 0x06D6..=0x06ED // Arabic
+			| 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF | 0x20D0..=0x20FF | 0xFE20..=0xFE2F
+	) || ((0x0900..=0x0DFF).contains(&code) // Devanagari to Sinhala: signs that aren't letters, digits or danda
+		&& !c.is_alphanumeric()
+		&& !matches!(code, 0x0964 | 0x0965 | 0x0970))
 }
 
 fn small_gray(page: &DynamicImage) -> GrayImage {
@@ -343,7 +361,34 @@ mod tests {
 	fn letters_in_any_script_count() {
 		assert!(is_plausible("Привет"));
 		assert!(is_plausible("שלום"));
-		assert!(!is_plausible("12345"));
+		assert!(!is_plausible("12"), "a page number alone isn't text");
+		assert!(!is_plausible("1l"));
+	}
+
+	#[test]
+	fn words_with_combining_marks_count() {
+		// Tamil and Hindi conjuncts: the virama (pulli) isn't alphabetic in Unicode.
+		assert!(is_plausible("மக்கள்"));
+		assert!(is_plausible("स्त्री"));
+		assert!(is_plausible("क़िला"), "with a nukta");
+		assert!(is_plausible("ಕನ್ನಡ"));
+		assert!(is_plausible("മലയാളം"));
+		assert!(is_plausible("తెలుగు"));
+		// Arabic and Hebrew with their vowel marks.
+		assert!(is_plausible("كَتَبَ"));
+		assert!(is_plausible("שָׁלוֹם"));
+		// Marks alone don't make a word.
+		assert!(!is_plausible("्ं"));
+	}
+
+	#[test]
+	fn groups_of_figures_count_so_a_table_of_numbers_has_text() {
+		assert!(is_plausible("12,340.50"));
+		assert!(is_plausible("$1,200"));
+		assert!(is_plausible("555-1234"));
+		assert!(is_plausible("2026"));
+		let table = [line(&[("12,340.50", 0.0, 0.0), ("9,812.00", 0.0, 0.0), ("1,003", 0.0, 0.0), ("7", 0.0, 0.0)])];
+		assert_eq!(plausible_text(&table), 3);
 	}
 
 	#[test]
