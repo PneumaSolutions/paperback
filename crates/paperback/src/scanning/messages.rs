@@ -189,6 +189,84 @@ pub fn finished(pages: usize) -> String {
 	nt("Scanned document, %d page.", "Scanned document, %d pages.", count(pages)).replacen("%d", &pages.to_string(), 1)
 }
 
+/// Said when the Scanning window closes while pages are still being read: the count isn't final yet, so it waits for the end.
+#[must_use]
+pub fn finishing() -> String {
+	// TRANSLATORS: Said when the Scanning window is closed while scanned pages are still being read; Paperback speaks again when the document is complete
+	t("Finishing the scan. Paperback will say when the document is complete.")
+}
+
+/// Save Scan As or closing the tab while the run still owns the archive.
+#[must_use]
+pub fn still_reading() -> String {
+	// TRANSLATORS: Said when Save Scan As or closing the tab is chosen while the pages of a scan are still being read
+	t("This scan is still being read. Save or close it once Paperback says the document is complete.")
+}
+
+#[must_use]
+pub fn quit_while_scanning() -> String {
+	// TRANSLATORS: Asked when Paperback is closed while a scan is still being read
+	t("A scan is still being read. Quit anyway? Pages already added are kept; pages not yet read are lost.")
+}
+
+#[must_use]
+pub fn confirm_stop() -> String {
+	// TRANSLATORS: Asked when the Scanning window is closed while the document feeder is still scanning
+	t("Stop scanning? The pages scanned so far are kept.")
+}
+
+/// A page that couldn't be added to the archive (a full disk is the likely reason). Said once: the run stops there.
+#[must_use]
+pub fn page_not_saved(number: usize, reason: &str, earlier: usize) -> String {
+	// TRANSLATORS: Said when a scanned page can't be saved; the first %d is the page number, %s the reason
+	let failed = t("Page %d could not be saved: %s.").replacen("%d", &number.to_string(), 1).replacen("%s", reason, 1);
+	// TRANSLATORS: Said after a scanned page could not be saved; %d is the number of pages saved before it
+	let safe = nt(
+		"Scanning stopped. The %d page before it is safe.",
+		"Scanning stopped. The %d pages before it are safe.",
+		count(earlier),
+	)
+	.replacen("%d", &earlier.to_string(), 1);
+	format!("{failed} {safe}")
+}
+
+#[must_use]
+pub fn page_unreadable() -> String {
+	// TRANSLATORS: Said when a page came from the scanner but its image couldn't be read, so it was left out
+	t("A scanned page could not be read and was left out.")
+}
+
+/// A feeder's pages aren't each announced; this is said every few seconds instead.
+#[must_use]
+pub fn pages_so_far(pages: usize) -> String {
+	// TRANSLATORS: Said every few seconds while the document feeder scans; %d is the number of pages added so far
+	nt("%d page so far.", "%d pages so far.", count(pages)).replacen("%d", &pages.to_string(), 1)
+}
+
+/// After a feeder run: what was noticed about particular pages, said once at the end rather than as each page went by.
+#[must_use]
+pub fn page_notes(notes: &[String]) -> String {
+	const SAID: usize = 5;
+	let mut message = notes.iter().take(SAID).cloned().collect::<Vec<_>>().join(" ");
+	if notes.len() > SAID {
+		let more = notes.len() - SAID;
+		// TRANSLATORS: Said at the end of a document feeder scan after the first few notes about particular pages; %d is how many more pages had a note
+		let rest = nt("%d more page had a note.", "%d more pages had a note.", count(more)).replacen(
+			"%d",
+			&more.to_string(),
+			1,
+		);
+		message = format!("{message} {rest}");
+	}
+	message
+}
+
+#[must_use]
+pub fn ocr_language_hint() -> String {
+	// TRANSLATORS: Said once when several scanned pages in a row have ink but no readable text
+	t("Several pages in a row had no text that could be read. The OCR language might not match the document.")
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -244,5 +322,24 @@ mod tests {
 		assert_eq!(scan_failed(&error), "The scan stopped: The scanner reported a paper jam.");
 		let missing = ScanError { kind: ErrorKind::SaneMissing, message: String::new() };
 		assert_eq!(scan_failed(&missing), sane_missing());
+	}
+
+	#[test]
+	fn notes_about_pages_are_said_together_and_capped() {
+		let notes: Vec<String> = (1..=7).map(|n| format!("Page {n} looks blank.")).collect();
+		let said = page_notes(&notes);
+		assert!(said.starts_with("Page 1 looks blank. Page 2"));
+		assert!(said.contains("Page 5 looks blank."));
+		assert!(!said.contains("Page 6"));
+		assert!(said.ends_with("2 more pages had a note."));
+		assert_eq!(page_notes(&notes[..1]), "Page 1 looks blank.");
+	}
+
+	#[test]
+	fn a_page_that_could_not_be_saved_says_the_earlier_ones_are_safe() {
+		assert_eq!(
+			page_not_saved(61, "no space left on device", 60),
+			"Page 61 could not be saved: no space left on device. Scanning stopped. The 60 pages before it are safe."
+		);
 	}
 }

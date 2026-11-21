@@ -196,6 +196,36 @@ pub(super) fn reparse_tab_in_place(
 	settings: ParseSettings,
 	style: &ReadabilityStyle,
 ) -> Result<(), String> {
+	let parse_path = tab.local_path().to_string_lossy().into_owned();
+	let mut new_session = match DocumentSession::new(&parse_path, password, forced_extension, settings) {
+		Ok(session) => session,
+		Err(err) => {
+			tracing::error!(path = %parse_path, error = %err, "failed to re-parse document");
+			return Err(err);
+		}
+	};
+	let unchanged = new_session.handle().document().buffer.content == tab.session.handle().document().buffer.content;
+	let local_path = tab.local_path().to_path_buf();
+	restore_recognized(&mut new_session, &local_path, joins_lines(&local_path) && settings.join_pdf_paragraphs);
+	install_session(tab, new_session, unchanged, style);
+	Ok(())
+}
+
+/// A scan that grows is parsed off the UI thread, with its text put back, then installed with [`install_session`].
+pub(super) fn parse_with_text(path: &Path, settings: ParseSettings) -> Result<DocumentSession, String> {
+	let parse_path = path.to_string_lossy().into_owned();
+	let mut session = DocumentSession::new(&parse_path, "", "", settings)?;
+	restore_recognized(&mut session, path, joins_lines(path) && settings.join_pdf_paragraphs);
+	Ok(session)
+}
+
+/// Puts a freshly parsed session in the tab, keeping the caret where it was (by anchor where there is one).
+pub(super) fn install_session(
+	tab: &mut DocumentTab,
+	new_session: DocumentSession,
+	unchanged: bool,
+	style: &ReadabilityStyle,
+) {
 	let new_fingerprint = read_fingerprint(tab.local_path());
 	let current_pos = tab.window.to_doc(tab.text_ctrl.get_insertion_point());
 	let pos = current_pos.min(tab.session.handle().document().buffer.end());
@@ -209,18 +239,7 @@ pub(super) fn reparse_tab_in_place(
 			.map(|(key, &anchor_off)| (key.clone(), pos - anchor_off))
 	};
 	let old_len = tab.session.document_len().get().max(1);
-	let parse_path = tab.local_path().to_string_lossy().into_owned();
-	let new_session = match DocumentSession::new(&parse_path, password, forced_extension, settings) {
-		Ok(session) => session,
-		Err(err) => {
-			tracing::error!(path = %parse_path, error = %err, "failed to re-parse document");
-			return Err(err);
-		}
-	};
-	let unchanged = new_session.handle().document().buffer.content == tab.session.handle().document().buffer.content;
 	tab.session = new_session;
-	let local_path = tab.local_path().to_path_buf();
-	restore_recognized(&mut tab.session, &local_path, joins_lines(&local_path) && settings.join_pdf_paragraphs);
 	// Scaled by length rather than through the whole-number percentage, which in a book of millions of characters is tens of thousands off.
 	let doc_len = tab.session.document_len();
 	let proportional = || DocPos::from_raw(pos.get().saturating_mul(doc_len.get()) / old_len);
@@ -252,5 +271,4 @@ pub(super) fn reparse_tab_in_place(
 	tab.disk_fingerprint = new_fingerprint;
 	// The caret was re-derived rather than carried over, so there's nothing honest to map the old mark onto.
 	tab.selection_mark.set(None);
-	Ok(())
 }

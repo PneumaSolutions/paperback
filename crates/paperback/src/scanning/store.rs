@@ -40,8 +40,19 @@ pub fn discard(path: &Path, config: &ConfigManager) {
 	tracing::info!(path = %path.display(), "discarded a scan in progress");
 }
 
-/// Save Scan As: a copy at `destination`, titled by its file name, with its recognized text, so it opens without OCR. The text is kept by the archive's contents, which the new title changes, so it's copied across.
+/// Save Scan As: a copy at `destination`, titled by its file name, with its recognized text, so it opens without OCR. The text is kept by the archive's contents, which the new title changes, so it's copied across. Never into the scans folder: a copy there would still count as a scan in progress, and a copy onto the scan itself would be deleted with it.
 pub fn save_copy(source: &Path, destination: &Path) -> anyhow::Result<()> {
+	copy_outside(source, destination, &scans_dir())
+}
+
+fn copy_outside(source: &Path, destination: &Path, scans: &Path) -> anyhow::Result<()> {
+	if is_inside(destination, scans) {
+		anyhow::bail!(
+			"{}",
+			// TRANSLATORS: Shown when Save Scan As is pointed at the folder Paperback keeps unsaved scans in
+			patois::t("that folder is where Paperback keeps scans in progress. Choose another folder.")
+		);
+	}
 	let title = destination.file_stem().map(|stem| stem.to_string_lossy().into_owned()).unwrap_or_default();
 	let lines = load_pages(&saved_pages_file(&saved_pages_dir(), source));
 	ScanArchive::open(source)?.copy_to(destination, &title)?;
@@ -55,31 +66,58 @@ pub fn save_copy(source: &Path, destination: &Path) -> anyhow::Result<()> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unsaved {
 	pub path: PathBuf,
-	/// It had been cut short by a crash and was repaired.
-	pub recovered: bool,
+	pub state: Recovery,
 }
 
-/// A scan in progress that doesn't open is repaired. `Some(true)` if it was, `Some(false)` if it opened as it was, `None` if not one page could be saved from it.
+/// What became of a scan in progress that was checked at start.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Recovery {
+	/// It opened as it was.
+	Intact,
+	/// A crash had cut it short, and its complete pages were recovered.
+	Repaired,
+	/// It doesn't open and couldn't be repaired just now (locked by another program, a read error, a full disk): it's kept as it is, to try again next time.
+	Unreadable,
+	/// Not one complete page in it. Only this may be deleted unasked.
+	Empty,
+}
+
+/// A scan in progress that doesn't open is repaired. Only a file with truly no complete page in it is [`Recovery::Empty`]; any error along the way leaves the file alone as [`Recovery::Unreadable`].
 #[must_use]
-pub fn recover(path: &Path) -> Option<bool> {
+pub fn recover(path: &Path) -> Recovery {
 	if archive::opens(path) {
-		return Some(false);
+		return Recovery::Intact;
 	}
 	match archive::repair(path) {
-		Ok(_) => Some(true),
+		Ok(archive::Repair::Recovered(_)) => Recovery::Repaired,
+		Ok(archive::Repair::NothingToRecover) => Recovery::Empty,
 		Err(error) => {
-			tracing::warn!(path = %path.display(), %error, "a scan in progress could not be recovered");
-			None
+			tracing::warn!(path = %path.display(), error = format!("{error:#}"), "a scan in progress could not be checked; keeping it");
+			Recovery::Unreadable
 		}
 	}
 }
 
-/// At start, after the documents left open have been restored: the scans in progress no tab has open, repaired where need be. Only a file with not one complete page in it is deleted, and stray temporary files from an interrupted write.
-pub fn unsaved_scans(open: &[PathBuf], config: &ConfigManager) -> Vec<Unsaved> {
-	unsaved_in(&scans_dir(), open, config)
+/// The scans in progress in `dir` no tab has open, repaired where need be, as the start-up offer gathers them ([`scans_left`], [`recover`] off the UI thread, then [`clear_empty`]). Only a file with not one complete page in it is deleted, and stray temporary files from an interrupted write. One that couldn't be read or repaired just now is kept and listed as [`Recovery::Unreadable`].
+#[cfg(test)]
+fn unsaved_in(dir: &Path, open: &[PathBuf], config: &ConfigManager) -> Vec<Unsaved> {
+	let checked = left_in(dir, open)
+		.into_iter()
+		.map(|(path, opens)| {
+			let state = if opens { Recovery::Intact } else { recover(&path) };
+			Unsaved { path, state }
+		})
+		.collect();
+	clear_empty(checked, config)
 }
 
-fn unsaved_in(dir: &Path, open: &[PathBuf], config: &ConfigManager) -> Vec<Unsaved> {
+/// The scans in progress no tab has open, and whether each opens as it is; the ones that don't need [`recover`], which copies the whole archive, so the caller can do that off the UI thread. Stray temporary files from an interrupted write are removed.
+#[must_use]
+pub fn scans_left(open: &[PathBuf]) -> Vec<(PathBuf, bool)> {
+	left_in(&scans_dir(), open)
+}
+
+fn left_in(dir: &Path, open: &[PathBuf]) -> Vec<(PathBuf, bool)> {
 	let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
 	let mut found = Vec::new();
 	let mut paths: Vec<PathBuf> = entries.filter_map(Result::ok).map(|entry| entry.path()).collect();
@@ -90,14 +128,28 @@ fn unsaved_in(dir: &Path, open: &[PathBuf], config: &ConfigManager) -> Vec<Unsav
 			Some("tmp") => {
 				let _ = fs::remove_file(&path);
 			}
-			Some("cbz") if !open.iter().any(|open| same_file(open, &path)) => match recover(&path) {
-				Some(recovered) => found.push(Unsaved { path, recovered }),
-				None => discard(&path, config),
-			},
+			Some("cbz") if !open.iter().any(|open| same_file(open, &path)) => {
+				let opens = archive::opens(&path);
+				found.push((path, opens));
+			}
 			_ => {}
 		}
 	}
 	found
+}
+
+/// Deletes the scans with not one complete page in them, and returns the rest.
+pub fn clear_empty(checked: Vec<Unsaved>, config: &ConfigManager) -> Vec<Unsaved> {
+	checked
+		.into_iter()
+		.filter(|scan| {
+			let empty = scan.state == Recovery::Empty;
+			if empty {
+				discard(&scan.path, config);
+			}
+			!empty
+		})
+		.collect()
 }
 
 #[must_use]
@@ -139,14 +191,58 @@ mod tests {
 		assert_eq!(
 			found,
 			vec![
-				Unsaved { path: crashed.clone(), recovered: true },
-				Unsaved { path: intact.clone(), recovered: false }
+				Unsaved { path: crashed.clone(), state: Recovery::Repaired },
+				Unsaved { path: intact.clone(), state: Recovery::Intact }
 			]
 		);
 		assert!(archive::opens(&crashed), "the crashed scan was repaired in place");
 		assert!(intact.exists() && open.exists());
 		assert!(!empty.exists(), "a file with not one complete page is cleared");
 		assert!(!leftover.exists());
+	}
+
+	#[test]
+	fn a_scan_that_cannot_be_repaired_just_now_is_kept_not_deleted() {
+		let dir = tempfile::tempdir().unwrap();
+		// Something named like a scan that can't be read: a folder stands in for a file another program has locked.
+		let locked = dir.path().join("Locked.cbz");
+		fs::create_dir(&locked).unwrap();
+		assert_eq!(recover(&locked), Recovery::Unreadable);
+		let found = unsaved_in(dir.path(), &[], &ConfigManager::new());
+		assert_eq!(found, vec![Unsaved { path: locked.clone(), state: Recovery::Unreadable }]);
+		assert!(locked.exists());
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn a_repair_that_cannot_write_its_copy_keeps_the_scan() {
+		use std::os::unix::fs::PermissionsExt as _;
+		let dir = tempfile::tempdir().unwrap();
+		let crashed = scan(dir.path(), "Crashed", 3);
+		let length = fs::metadata(&crashed).unwrap().len();
+		OpenOptions::new().write(true).open(&crashed).unwrap().set_len(length - 40).unwrap();
+		let before = fs::read(&crashed).unwrap();
+		// As on a full disk: the repaired copy can't be written beside it.
+		fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o500)).unwrap();
+		let writable = tempfile::tempfile_in(dir.path()).is_ok();
+		let state = recover(&crashed);
+		fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o700)).unwrap();
+		if writable {
+			// Running as root: permissions don't stop the copy, so there's nothing to show here.
+			return;
+		}
+		assert_eq!(state, Recovery::Unreadable);
+		assert_eq!(fs::read(&crashed).unwrap(), before, "left exactly as it was");
+	}
+
+	#[test]
+	fn a_scan_is_never_saved_into_the_scans_folder() {
+		let dir = tempfile::tempdir().unwrap();
+		let source = scan(dir.path(), "Scan", 1);
+		let scans = dir.path();
+		assert!(copy_outside(&source, &scans.join("Kept.cbz"), scans).is_err());
+		assert!(!scans.join("Kept.cbz").exists());
+		assert!(copy_outside(&source, &source, scans).is_err(), "nor onto the scan itself");
 	}
 
 	#[test]

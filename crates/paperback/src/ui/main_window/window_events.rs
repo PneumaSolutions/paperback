@@ -166,6 +166,15 @@ pub(super) fn bind_teardown(
 			config_busy = config_for_close.try_lock().is_err(),
 			"closing the main window"
 		);
+		// Pages still being read into a scan would be lost; the ones already added are kept either way.
+		if crate::ui::scan_session::is_busy()
+			&& let WindowEventData::General(ref ev) = event
+			&& ev.can_veto()
+			&& !wx_utils::confirm(&frame, crate::scanning::messages::quit_while_scanning(), &t("Scan Document"))
+		{
+			ev.veto();
+			return;
+		}
 		let mut dm = dm_for_close.lock().unwrap();
 		{
 			let cfg = config_for_close.lock().unwrap();

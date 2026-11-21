@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: paperback 1.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-21 15:22-0500\n"
+"POT-Creation-Date: 2026-11-21 16:08-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -313,6 +313,55 @@ msgid "Scanned document, %d page."
 msgid_plural "Scanned document, %d pages."
 msgstr[0] ""
 msgstr[1] ""
+
+#. TRANSLATORS: Said when the Scanning window is closed while scanned pages are still being read; Paperback speaks again when the document is complete
+msgid "Finishing the scan. Paperback will say when the document is complete."
+msgstr ""
+
+#. TRANSLATORS: Said when Save Scan As or closing the tab is chosen while the pages of a scan are still being read
+msgid "This scan is still being read. Save or close it once Paperback says the document is complete."
+msgstr ""
+
+#. TRANSLATORS: Asked when Paperback is closed while a scan is still being read
+msgid "A scan is still being read. Quit anyway? Pages already added are kept; pages not yet read are lost."
+msgstr ""
+
+#. TRANSLATORS: Asked when the Scanning window is closed while the document feeder is still scanning
+msgid "Stop scanning? The pages scanned so far are kept."
+msgstr ""
+
+#. TRANSLATORS: Said when a scanned page can't be saved; the first %d is the page number, %s the reason
+msgid "Page %d could not be saved: %s."
+msgstr ""
+
+msgid "Scanning stopped. The %d page before it is safe."
+msgid_plural "Scanning stopped. The %d pages before it are safe."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: Said when a page came from the scanner but its image couldn't be read, so it was left out
+msgid "A scanned page could not be read and was left out."
+msgstr ""
+
+#. TRANSLATORS: Said every few seconds while the document feeder scans; %d is the number of pages added so far
+msgid "%d page so far."
+msgid_plural "%d pages so far."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: Said at the end of a document feeder scan after the first few notes about particular pages; %d is how many more pages had a note
+msgid "%d more page had a note."
+msgid_plural "%d more pages had a note."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: Said once when several scanned pages in a row have ink but no readable text
+msgid "Several pages in a row had no text that could be read. The OCR language might not match the document."
+msgstr ""
+
+#. TRANSLATORS: Shown when Save Scan As is pointed at the folder Paperback keeps unsaved scans in
+msgid "that folder is where Paperback keeps scans in progress. Choose another folder."
+msgstr ""
 
 #. TRANSLATORS: Announced when skipping forward while read aloud is on the last paragraph
 msgid "No next paragraph."
@@ -1800,6 +1849,10 @@ msgstr ""
 msgid "Comic book archives (*.cbz)|*.cbz"
 msgstr ""
 
+#. TRANSLATORS: Asked when the name chosen for a saved scan, with .cbz added, is already taken; %s is the file name
+msgid "%s already exists. Replace it?"
+msgstr ""
+
 #. TRANSLATORS: Title of the question asked at start about scanned documents that were never saved
 msgid "Unsaved Scans"
 msgstr ""
@@ -1811,6 +1864,11 @@ msgstr[1] ""
 
 msgid "%d of them was cut short when Paperback closed unexpectedly, and its complete pages have been recovered."
 msgid_plural "%d of them were cut short when Paperback closed unexpectedly, and their complete pages have been recovered."
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%d of them could not be opened just now; it is kept as it is."
+msgid_plural "%d of them could not be opened just now; they are kept as they are."
 msgstr[0] ""
 msgstr[1] ""
 
@@ -2934,7 +2992,15 @@ msgstr ""
 msgid "Saved as %s."
 msgstr ""
 
+#. TRANSLATORS: Shown at start while scanned documents that were cut short by Paperback closing unexpectedly are repaired
+msgid "Recovering scans that were cut short..."
+msgstr ""
+
 msgid "%s was cut short when Paperback closed; its complete pages have been recovered."
+msgstr ""
+
+#. TRANSLATORS: Announced at start when a scanned document left open couldn't be opened just now (another program may be using it); %s is its title. It's kept, and offered again next time.
+msgid "%s could not be opened just now. It has been kept."
 msgstr ""
 
 #. TRANSLATORS: Announced after text is copied, with Ctrl+C or from the marked beginning of a selection. The %d placeholder is replaced with the number of characters copied. Plural form is chosen by that count.

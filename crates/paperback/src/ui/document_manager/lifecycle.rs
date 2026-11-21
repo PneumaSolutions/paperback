@@ -262,6 +262,11 @@ impl DocumentManager {
 			return self.close_document_without_asking(index, save_state);
 		}
 		let title = super::display_title(tab);
+		// Its pages are still being read into it: closing now would lose them, and the run would have nowhere to put them.
+		if crate::ui::scan_session::is_busy_with(&path) {
+			wx_utils::show_info(&self.notebook, crate::scanning::messages::still_reading(), &title);
+			return false;
+		}
 		let position = tab.window.to_doc(tab.text_ctrl.get_insertion_point());
 		match ask_to_save_scan(&self.notebook, &title) {
 			CloseChoice::Cancel => false,

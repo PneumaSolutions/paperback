@@ -30,6 +30,7 @@ mod position;
 mod read_aloud;
 mod reload;
 mod scan;
+pub use scan::{parse_scan, scan_parse_settings};
 mod tabs;
 mod window;
 

@@ -168,12 +168,15 @@ pub struct ScanningWindow {
 	pub rescan: Button,
 	pub skip: Button,
 	pub stop: Button,
+	/// Escape and the close box press it; the scan run decides whether the window closes.
+	pub done: Button,
 }
 
 const ID_SCAN_NEXT: i32 = ID_HIGHEST + 2;
 const ID_RESCAN: i32 = ID_HIGHEST + 3;
 const ID_SKIP: i32 = ID_HIGHEST + 4;
 const ID_STOP: i32 = ID_HIGHEST + 5;
+const ID_DONE: i32 = ID_HIGHEST + 8;
 
 impl ScanningWindow {
 	pub fn build(parent: &Frame, feeder: bool) -> Self {
@@ -197,8 +200,9 @@ impl ScanningWindow {
 		// TRANSLATORS: Button in the Scanning window that stops the scan in progress
 		let stop = Button::builder(&dialog).with_id(ID_STOP).with_label(&t("S&top")).build();
 		// TRANSLATORS: Button in the Scanning window that closes it and goes to the scanned document
-		let done = Button::builder(&dialog).with_id(ID_CANCEL).with_label(&t("&Done")).build();
-		dialog.set_escape_id(ID_CANCEL);
+		let done = Button::builder(&dialog).with_id(ID_DONE).with_label(&t("&Done")).build();
+		// Not the Cancel ID, so Escape doesn't close the window by itself: a feeder still scanning asks first.
+		dialog.set_escape_id(ID_DONE);
 		let buttons = BoxSizer::builder(Orientation::Horizontal).build();
 		for button in [next, rescan, skip, stop, done] {
 			buttons.add(&button, 0, SizerFlag::Right, padding / 2);
@@ -210,7 +214,7 @@ impl ScanningWindow {
 		dialog.set_min_size(Size::new(520, 160));
 		dialog.fit();
 		dialog.centre();
-		Self { dialog, status, next, rescan, skip, stop }
+		Self { dialog, status, next, rescan, skip, stop, done }
 	}
 
 	pub fn say(&self, message: &str) {
@@ -220,8 +224,10 @@ impl ScanningWindow {
 		live_region::announce(self.status, message);
 	}
 
-	/// Only the buttons that mean something now are shown, so Tab never lands on one that would do nothing. Rescan sits beside Scan Next Page for a page that may not be lined up, without taking Enter from it.
-	pub fn show_buttons(&self, scanning: bool, asking_blank: bool, can_rescan: bool) {
+	/// Only the buttons that mean something now are shown, so Tab never lands on one that would do nothing. Rescan sits beside Scan Next Page for a page that may not be lined up, without taking Enter from it. The focus moves only when the button it was on is hidden, or nothing in the window has it (`force` moves it anyway), since a screen reader announcing a focus change cuts off what it was saying.
+	pub fn show_buttons(&self, state: Buttons, force: bool) {
+		let Buttons { scanning, asking_blank, can_rescan } = state;
+		let focused_before = self.focused_button();
 		self.stop.show(scanning);
 		self.next.show(!scanning && !asking_blank);
 		self.rescan.show(!scanning && (asking_blank || can_rescan));
@@ -235,8 +241,25 @@ impl ScanningWindow {
 		};
 		focus.set_default();
 		self.dialog.layout();
-		focus.set_focus();
+		let still_there = focused_before.is_some_and(|button| button.is_shown());
+		if force || !still_there {
+			focus.set_focus();
+		}
 	}
+
+	fn focused_button(&self) -> Option<Button> {
+		[self.next, self.rescan, self.skip, self.stop, self.done].into_iter().find(WxWidget::has_focus)
+	}
+}
+
+/// What the Scanning window's buttons are for right now.
+#[derive(Debug, Clone, Copy)]
+pub struct Buttons {
+	pub scanning: bool,
+	/// A flatbed page came out blank: Rescan or Skip.
+	pub asking_blank: bool,
+	/// A flatbed page that may not be lined up: Rescan beside Scan Next Page.
+	pub can_rescan: bool,
 }
 
 /// What to do with a scan in progress that is being closed.
@@ -300,13 +323,31 @@ pub fn choose_save_path(parent: &dyn WxWidget, title: &str) -> Option<std::path:
 	if dialog.show_modal() != ID_OK {
 		return None;
 	}
-	let path = std::path::PathBuf::from(dialog.get_path()?);
-	// The archive is a comic book archive whatever the reader typed, so Paperback and other readers know it.
-	Some(if path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("cbz")) {
-		path
-	} else {
-		path.with_extension("cbz")
-	})
+	let chosen = std::path::PathBuf::from(dialog.get_path()?);
+	let path = with_cbz_extension(chosen.clone());
+	// The picker asked about overwriting the name as typed; a name it never saw gets asked about here.
+	if path != chosen && path.exists() {
+		// TRANSLATORS: Asked when the name chosen for a saved scan, with .cbz added, is already taken; %s is the file name
+		let question = t("%s already exists. Replace it?").replacen(
+			"%s",
+			&path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default(),
+			1,
+		);
+		if !wx_utils::confirm(parent, question, &caption) {
+			return None;
+		}
+	}
+	Some(path)
+}
+
+/// The archive is a comic book archive whatever the reader typed, so Paperback and other readers know it. `.cbz` is added to the name, never put in place of what follows its last dot: "Dr. Smith letter" stays itself.
+fn with_cbz_extension(path: std::path::PathBuf) -> std::path::PathBuf {
+	if path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("cbz")) {
+		return path;
+	}
+	let mut name = path.file_name().map(std::ffi::OsStr::to_os_string).unwrap_or_default();
+	name.push(".cbz");
+	path.with_file_name(name)
 }
 
 /// What to do with scans in progress left from last time.
@@ -318,8 +359,13 @@ pub enum UnsavedChoice {
 
 const ID_DELETE: i32 = ID_HIGHEST + 7;
 
-/// Asked at start when scans in progress were left by quitting or a crash and nothing reopened them. Nothing is deleted unless the reader chooses Delete and confirms it.
-pub fn ask_about_unsaved_scans(parent: &dyn WxWidget, count: usize, recovered: usize) -> UnsavedChoice {
+/// Asked at start when scans in progress were left by quitting or a crash and nothing reopened them. Nothing is deleted unless the reader chooses Delete and confirms it. `unreadable` couldn't be opened just now (another program may be using one); Open leaves them for next time.
+pub fn ask_about_unsaved_scans(
+	parent: &dyn WxWidget,
+	count: usize,
+	recovered: usize,
+	unreadable: usize,
+) -> UnsavedChoice {
 	// TRANSLATORS: Title of the question asked at start about scanned documents that were never saved
 	let dialog = Dialog::builder(parent, &t("Unsaved Scans")).build();
 	let _destroy = super::DestroyOnDrop(dialog);
@@ -341,6 +387,17 @@ pub fn ask_about_unsaved_scans(parent: &dyn WxWidget, count: usize, recovered: u
 			recovered_u64,
 		)
 		.replacen("%d", &recovered.to_string(), 1);
+		message = format!("{message} {note}");
+	}
+	if unreadable > 0 {
+		let unreadable_u64 = u64::try_from(unreadable).unwrap_or(u64::MAX);
+		// TRANSLATORS: Part of the question asked at start; %d is how many of the unsaved scans couldn't be opened just now (another program may be using them). They're kept and offered again next time.
+		let note = patois::nt(
+			"%d of them could not be opened just now; it is kept as it is.",
+			"%d of them could not be opened just now; they are kept as they are.",
+			unreadable_u64,
+		)
+		.replacen("%d", &unreadable.to_string(), 1);
 		message = format!("{message} {note}");
 	}
 	// TRANSLATORS: The end of the question asked at start about unsaved scans; Open, Delete and Keep for Later are its buttons
@@ -384,5 +441,22 @@ pub fn ask_about_unsaved_scans(parent: &dyn WxWidget, count: usize, recovered: u
 			}
 		}
 		_ => UnsavedChoice::Later,
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use std::path::PathBuf;
+
+	use super::with_cbz_extension;
+
+	#[test]
+	fn cbz_is_added_to_the_name_not_put_in_place_of_its_last_dot() {
+		let named = |name: &str| with_cbz_extension(PathBuf::from("/saved").join(name));
+		assert_eq!(named("Dr. Smith letter"), PathBuf::from("/saved/Dr. Smith letter.cbz"));
+		assert_eq!(named("Report v1.2"), PathBuf::from("/saved/Report v1.2.cbz"));
+		assert_eq!(named("Bank letter.cbz"), PathBuf::from("/saved/Bank letter.cbz"));
+		assert_eq!(named("Bank letter.CBZ"), PathBuf::from("/saved/Bank letter.CBZ"));
+		assert_eq!(named("notes.txt"), PathBuf::from("/saved/notes.txt.cbz"));
 	}
 }
