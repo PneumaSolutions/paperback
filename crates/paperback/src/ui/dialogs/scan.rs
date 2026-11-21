@@ -2,12 +2,15 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-use paperback_scan::{ColorMode, RESOLUTIONS, ScanSettings, ScannerInfo, Source};
 use patois::t;
 use wxdragon::prelude::*;
 
 use super::{add_ok_cancel_footer, build_ok_cancel_buttons, dialog_padding};
-use crate::scanning::{messages, remembered::Remembered};
+use crate::scanning::{
+	messages,
+	remembered::Remembered,
+	scanner::{ColorMode, RESOLUTIONS, ScanSettings, ScannerInfo, Source},
+};
 
 pub enum SettingsChoice {
 	Scan { scanner: ScannerInfo, settings: ScanSettings, skip_blank_sides: bool },

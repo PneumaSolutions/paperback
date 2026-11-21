@@ -21,9 +21,11 @@ live-region = "0.3.3"
 logkeeper = "0.1.0"
 mailbag-wx = "0.1.0"
 native-ocr = { workspace = true }
+# pagescan is Pneuma Solutions' scanner library: WIA on Windows, ImageCaptureCore on macOS, SANE (loaded at run time) on Linux.
+# TODO: switch to the crates.io release once pagescan is published; the repository is private until then.
+pagescan = { git = "https://github.com/PneumaSolutions/pagescan", rev = "54c8d08ffa96ad99e022dc47bc436c8e96b95eaa" }
 paperback-core = { workspace = true, features = ["fetch"] }
 paperback-formats = { workspace = true }
-paperback-scan = { workspace = true }
 patois = { workspace = true, features = ["wx"] }
 rodio = { version = "0.22.2", default-features = false, features = ["playback", "tracing", "flac", "mp3", "mp4", "vorbis", "wav", "symphonia-adpcm", "symphonia-aiff", "symphonia-alac", "symphonia-mp2"] }
 rodio-wsola = "0.2.0"

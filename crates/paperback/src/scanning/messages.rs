@@ -1,8 +1,9 @@
 //! Everything the scan run says, in one place so the wording reads as one voice and the tests can hold it. Spoken in the order a sighted person would notice: the page and its words, then anything odd about it.
 
 use paperback_core::scan::check::{TextAmount, Turn};
-use paperback_scan::{ErrorKind, ScanError, Source};
 use patois::{nt, t};
+
+use crate::scanning::scanner::{ErrorKind, ScanError, Source};
 
 fn count(n: usize) -> u64 {
 	u64::try_from(n).unwrap_or(u64::MAX)

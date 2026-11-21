@@ -1,11 +1,12 @@
 //! Scanners for File > Scan document: list them with their sources, and scan pages as images.
 //!
-//! A thin layer over [pagescan](https://github.com/PneumaSolutions/pagescan), which talks to each platform's own scanning system: WIA on Windows (2.0, with a 1.0 fallback), ImageCaptureCore on macOS, and SANE on Linux, loaded at run time. Paperback only sees [`Scanner`], so the dialog and its tests run against [`fake::FakeScanner`] as well as the real thing.
+//! A thin layer over [pagescan](https://github.com/PneumaSolutions/pagescan), which talks to each platform's own scanning system: WIA on Windows (2.0, with a 1.0 fallback), ImageCaptureCore on macOS, and SANE on Linux, loaded at run time. Paperback only sees [`Scanner`], so the scan session's tests run against a fake scanner as well as the real thing.
 
 use std::time::Duration;
 
 pub use image::DynamicImage;
 
+#[cfg(test)]
 pub mod fake;
 mod system;
 
@@ -110,7 +111,7 @@ pub trait Scanner: Send + Sync {
 	fn list(&self) -> Result<Vec<ScannerInfo>, ScanError>;
 
 	/// Calls `on_page` with each page as soon as it is scanned, in order.
-	fn scan(&self, scanner: &str, settings: &ScanSettings, on_page: &mut dyn FnMut(DynamicImage)) -> ScanSummary;
+	fn scan(&self, scanner: &str, settings: ScanSettings, on_page: &mut dyn FnMut(DynamicImage)) -> ScanSummary;
 
 	/// Stops a running scan at the next point the scanner allows. Safe from any thread. A cancel made after [`Self::prepare`] reaches the next scan even if it comes before that scan has started.
 	fn cancel(&self);

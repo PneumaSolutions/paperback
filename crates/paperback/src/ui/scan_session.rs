@@ -29,9 +29,6 @@ use paperback_core::{
 	},
 	session::DocumentSession,
 };
-use paperback_scan::{
-	DynamicImage, ErrorKind, ScanError, ScanSettings, ScanSummary, Scanner, ScannerInfo, Source, SystemScanner,
-};
 use patois::t;
 use wx_utils::{
 	progress::{Ended, run_without_estimate},
@@ -45,6 +42,9 @@ use crate::{
 		messages,
 		pages::{self, Mode},
 		remembered::Remembered,
+		scanner::{
+			DynamicImage, ErrorKind, ScanError, ScanSettings, ScanSummary, Scanner, ScannerInfo, Source, SystemScanner,
+		},
 		store::{self, Recovery},
 	},
 	ui::{
@@ -109,7 +109,7 @@ impl Run {
 	fn overdue(&self, started: Instant) -> bool {
 		!self.scanner_ended.load(Ordering::Acquire)
 			&& (self.cancelled_at.lock().unwrap().is_some_and(|at| at.elapsed() > GIVE_UP_AFTER_CANCEL)
-				|| started.elapsed() > paperback_scan::TIMEOUT + GIVE_UP_AFTER_CANCEL)
+				|| started.elapsed() > crate::scanning::scanner::TIMEOUT + GIVE_UP_AFTER_CANCEL)
 	}
 }
 
@@ -530,7 +530,7 @@ fn start_run() {
 	}
 	let main_thread = scanner.needs_main_thread();
 	let scan = move || {
-		let summary = scanner.scan(&scanner_id, &settings, &mut |page| {
+		let summary = scanner.scan(&scanner_id, settings, &mut |page| {
 			run.scanned.fetch_add(1, Ordering::AcqRel);
 			// Encoded here, while the driver goes on with the next page in its own thread (or its own buffers, for SANE).
 			let message = match encode_png(&page) {
@@ -875,6 +875,7 @@ impl Session {
 				}
 			}
 			Event::Ended(summary) => {
+				tracing::info!(pages = summary.pages, error = ?summary.error, "a scan run ended");
 				self.run = None;
 				if self.dirty {
 					self.flush();
@@ -1273,12 +1274,12 @@ fn finish() {
 mod tests {
 	use image::{GrayImage, Luma};
 	use paperback_core::ocr::RecognizedWord;
-	use paperback_scan::{
+
+	use super::*;
+	use crate::scanning::scanner::{
 		ScanSettings, Scanner, ScannerInfo, Source,
 		fake::{FakeScanner, Script},
 	};
-
-	use super::*;
 
 	const TEXT: &str = "The committee met on Tuesday to review the proposal and agreed that the plan should move forward after small changes were made to the budget section";
 
@@ -1379,7 +1380,7 @@ mod tests {
 		let mut events = Vec::new();
 		thread::scope(|scope| {
 			scope.spawn(|| {
-				let summary = scanner.scan("fake", &settings, &mut |page| {
+				let summary = scanner.scan("fake", settings, &mut |page| {
 					run.scanned.fetch_add(1, Ordering::AcqRel);
 					to_ocr.send(ToOcr::Page(encode_png(&page).unwrap())).unwrap();
 				});

@@ -8,7 +8,7 @@ use std::{
 	},
 };
 
-use crate::{DynamicImage, ErrorKind, ScanError, ScanSettings, ScanSummary, Scanner, ScannerInfo};
+use super::{DynamicImage, ErrorKind, ScanError, ScanSettings, ScanSummary, Scanner, ScannerInfo};
 
 /// What one call to [`Scanner::scan`] produces.
 #[derive(Debug, Clone, Default)]
@@ -84,8 +84,8 @@ impl Scanner for FakeScanner {
 		self.scanners.clone()
 	}
 
-	fn scan(&self, scanner: &str, settings: &ScanSettings, on_page: &mut dyn FnMut(DynamicImage)) -> ScanSummary {
-		self.calls.lock().unwrap().push((scanner.to_string(), *settings));
+	fn scan(&self, scanner: &str, settings: ScanSettings, on_page: &mut dyn FnMut(DynamicImage)) -> ScanSummary {
+		self.calls.lock().unwrap().push((scanner.to_string(), settings));
 		let known = self.scanners.as_ref().is_ok_and(|list| list.iter().any(|info| info.id == scanner));
 		if !known {
 			let message = "The scanner was not found.".to_string();
@@ -119,7 +119,7 @@ impl Scanner for FakeScanner {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::Source;
+	use crate::scanning::scanner::Source;
 
 	fn scanner() -> ScannerInfo {
 		ScannerInfo {
@@ -138,7 +138,7 @@ mod tests {
 	fn pages_arrive_one_by_one_in_order() {
 		let fake = FakeScanner::new(vec![scanner()]).with_script(Script::pages(vec![page(1), page(2), page(3)]));
 		let mut seen = Vec::new();
-		let summary = fake.scan("fake", &ScanSettings::default(), &mut |page| seen.push(page.width()));
+		let summary = fake.scan("fake", ScanSettings::default(), &mut |page| seen.push(page.width()));
 		assert_eq!(seen, vec![1, 2, 3]);
 		assert_eq!(summary.pages, 3);
 		assert!(summary.error.is_none());
@@ -148,7 +148,7 @@ mod tests {
 	#[test]
 	fn a_jam_keeps_the_pages_before_it() {
 		let fake = FakeScanner::new(vec![scanner()]).with_script(Script::failing(vec![page(1)], "Paper jam."));
-		let summary = fake.scan("fake", &ScanSettings::default(), &mut |_| {});
+		let summary = fake.scan("fake", ScanSettings::default(), &mut |_| {});
 		assert_eq!(summary.pages, 1);
 		assert_eq!(summary.error.unwrap().message, "Paper jam.");
 	}
@@ -158,7 +158,7 @@ mod tests {
 		let fake = FakeScanner::new(vec![scanner()])
 			.with_script(Script::pages(vec![page(1), page(2), page(3)]))
 			.cancelling_after(2);
-		let summary = fake.scan("fake", &ScanSettings::default(), &mut |_| {});
+		let summary = fake.scan("fake", ScanSettings::default(), &mut |_| {});
 		assert_eq!(summary.pages, 2);
 		assert_eq!(summary.error.unwrap().kind, ErrorKind::Cancelled);
 	}
@@ -170,17 +170,17 @@ mod tests {
 			.with_script(Script::pages(vec![page(2)]));
 		fake.prepare();
 		fake.cancel();
-		let summary = fake.scan("fake", &ScanSettings::default(), &mut |_| {});
+		let summary = fake.scan("fake", ScanSettings::default(), &mut |_| {});
 		assert_eq!(summary.pages, 0);
 		assert_eq!(summary.error.unwrap().kind, ErrorKind::Cancelled);
 		fake.prepare();
-		assert_eq!(fake.scan("fake", &ScanSettings::default(), &mut |_| {}).pages, 1);
+		assert_eq!(fake.scan("fake", ScanSettings::default(), &mut |_| {}).pages, 1);
 	}
 
 	#[test]
 	fn an_unknown_scanner_is_an_error() {
 		let fake = FakeScanner::new(vec![scanner()]);
-		assert!(fake.scan("gone", &ScanSettings::default(), &mut |_| {}).error.is_some());
+		assert!(fake.scan("gone", ScanSettings::default(), &mut |_| {}).error.is_some());
 	}
 
 	#[test]

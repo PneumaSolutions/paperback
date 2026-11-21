@@ -6,9 +6,11 @@ use paperback_core::{
 	ocr::RecognizedLine,
 	scan::check::{self, Turn},
 };
-use paperback_scan::DynamicImage;
 
-use crate::ocr::{self, OcrError};
+use crate::{
+	ocr::{self, OcrError},
+	scanning::scanner::DynamicImage,
+};
 
 /// Lines read, and the size of the image they were read from, which their word boxes are measured in.
 pub type Reading = (Vec<RecognizedLine>, u32, u32);

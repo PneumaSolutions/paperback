@@ -4,8 +4,9 @@
 use std::collections::BTreeMap;
 
 use paperback_core::config::ConfigManager;
-use paperback_scan::{ColorMode, RESOLUTIONS, ScanSettings, ScannerInfo, Source};
 use serde_json::{Map, Value, json};
+
+use crate::scanning::scanner::{ColorMode, RESOLUTIONS, ScanSettings, ScannerInfo, Source};
 
 const KEY: &str = "scanners";
 
