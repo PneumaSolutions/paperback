@@ -11,7 +11,7 @@ repository.workspace = true
 image = { workspace = true }
 # pagescan is Pneuma Solutions' scanner library: WIA on Windows, ImageCaptureCore on macOS, SANE (loaded at run time) on Linux.
 # TODO: switch to the crates.io release once pagescan is published; the repository is private until then.
-pagescan = { git = "https://github.com/PneumaSolutions/pagescan", rev = "65891a1e2d0d0f464e974d2894ea3cf8d9be3d53" }
+pagescan = { git = "https://github.com/PneumaSolutions/pagescan", rev = "62aba30f4434eb3f1c484db763a313305e023237" }
 
 [lints]
 workspace = true
