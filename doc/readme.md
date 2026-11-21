@@ -101,13 +101,15 @@ Put a page face down on the glass and choose Scan. Paperback scans it, reads it 
 
 ### Scanning from the document feeder
 
-Load the pages and choose Scan. Paperback scans them all and announces each page as its text is read. Every page is kept; one with nothing on it is announced as looking blank, since it might be face down. When the feeder is empty it tells you how many pages it scanned. To scan more pages into the same document, load them and press Enter; press Escape to finish.
+Load the pages and choose Scan. Paperback scans them all, announces the first page as its text is read, and then says how many pages it has so far every few seconds, so speech doesn't fall behind the feeder. Every page is kept; one with nothing on it is noted as looking blank, since it might be face down. When the feeder is empty it tells you how many pages it scanned, followed by anything it noticed about particular pages (turned, blank, not lined up). To scan more pages into the same document, load them and press Enter; press Escape to finish. If you press Escape while the feeder is still scanning, Paperback asks before stopping it.
 
 Document feeder, both sides, scans the front and back of every sheet and keeps both.
 
-If you check Skip blank pages, Paperback keeps only the pages, or sides, with real text on them, so a stack printed on one side comes out as just its printed pages, and with both sides, whichever way up you loaded it. It decides by the words OCR finds, not by how dark the page looks, so show-through from the other side of thin paper doesn't count as text. That also means a page with only a photo, a signature or handwriting can be skipped, which is why the option is off by default. With it on, only the pages kept are announced, and at the end Paperback sums up, for example "5 sheets, 7 pages, 3 blank sides skipped."
+If you check Skip blank pages, Paperback leaves out the blank pages, or sides, so a stack printed on one side comes out as just its printed pages, and with both sides, whichever way up you loaded it. A page counts as blank if it has no ink on it, or if its only ink is show-through from the other side of thin paper. A page with ink that OCR can't read, such as a photo, handwriting, a table of figures or a language the OCR isn't set up for, is kept, and noted as having no text found. The option is off by default, since a page with only a faint signature could still look blank. With it on, at the end Paperback sums up, for example "5 sheets, 7 pages, 3 blank sides skipped." If several pages in a row have ink but no readable text, Paperback mentions that the OCR language might not match the document.
 
-The document opens after the first page has been read, and later pages appear in it as they're read, so you can look at what's there while the rest are scanned. While the Scanning window is open the document catches up every second or so; after you close it, the pages still being read are added once they're all done, so the text under your cursor doesn't change while you read.
+The document opens after the first page has been read, and later pages appear in it as they're read, so you can look at what's there while the rest are scanned. While the Scanning window is open the document catches up every second or so; after you close it, the pages still being read are added once they're all done, so the text under your cursor doesn't change while you read, and Paperback tells you the final page count then. Until that point you can't save or close the scan, and quitting asks first, since the last pages would be lost.
+
+If a page can't be saved, for example because the disk is full, Paperback stops the scan and says so; the pages before it are safe.
 
 ### When a page needs attention
 
