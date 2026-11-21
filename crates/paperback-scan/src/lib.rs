@@ -112,8 +112,11 @@ pub trait Scanner: Send + Sync {
 	/// Calls `on_page` with each page as soon as it is scanned, in order.
 	fn scan(&self, scanner: &str, settings: &ScanSettings, on_page: &mut dyn FnMut(DynamicImage)) -> ScanSummary;
 
-	/// Stops a running scan at the next point the scanner allows. Safe from any thread.
+	/// Stops a running scan at the next point the scanner allows. Safe from any thread. A cancel made after [`Self::prepare`] reaches the next scan even if it comes before that scan has started.
 	fn cancel(&self);
+
+	/// Called before a scan's thread starts: forgets a cancel meant for an earlier scan.
+	fn prepare(&self) {}
 
 	/// macOS's ImageCaptureCore delivers to the main thread, so there a scan must run on it; elsewhere it runs on a worker.
 	fn needs_main_thread(&self) -> bool {
@@ -121,5 +124,5 @@ pub trait Scanner: Send + Sync {
 	}
 }
 
-/// A scan has to end some time even if the driver never says so.
+/// A scan has to end some time even if the driver never says so. pagescan holds to it even when a driver stops responding (it gives up on the driver about 30 seconds later, keeping the pages so far), and Paperback's own watchdog ends the run if even that doesn't happen.
 pub const TIMEOUT: Duration = Duration::from_mins(15);

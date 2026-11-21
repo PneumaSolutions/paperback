@@ -26,16 +26,22 @@ impl Scanner for SystemScanner {
 	}
 
 	fn scan(&self, scanner: &str, settings: &ScanSettings, on_page: &mut dyn FnMut(DynamicImage)) -> ScanSummary {
-		self.cancelled.store(false, Ordering::Release);
 		let options = options(scanner, *settings);
 		let mut pages = 0;
+		// pagescan forgets a cancel made just before its scan starts, so one made since `prepare` is passed on again as soon as the scan reports anything.
+		let pass_on_cancel = || {
+			if self.cancelled.load(Ordering::Acquire) {
+				pagescan::cancel();
+			}
+		};
 		// Streamed: each page is handed over by value and pagescan keeps none of them.
 		let outcome = pagescan::scan_with_pages(
 			&options,
-			|_| {},
+			|_| pass_on_cancel(),
 			|_, page| {
 				pages += 1;
 				on_page(page);
+				pass_on_cancel();
 			},
 		);
 		let error = outcome.error.map(|error| convert(&error, self.cancelled.load(Ordering::Acquire)));
@@ -45,6 +51,10 @@ impl Scanner for SystemScanner {
 	fn cancel(&self) {
 		self.cancelled.store(true, Ordering::Release);
 		pagescan::cancel();
+	}
+
+	fn prepare(&self) {
+		self.cancelled.store(false, Ordering::Release);
 	}
 
 	fn needs_main_thread(&self) -> bool {
@@ -62,6 +72,8 @@ fn options(scanner: &str, settings: ScanSettings) -> ScanOptions {
 		ColorMode::Color => pagescan::ColorMode::Color,
 	};
 	options.timeout = TIMEOUT;
+	// On macOS the scan runs on the main thread; this keeps the Scanning window answering, so Stop can be pressed.
+	options.app_events = cfg!(target_os = "macos");
 	options
 }
 

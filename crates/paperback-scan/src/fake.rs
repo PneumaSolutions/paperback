@@ -85,7 +85,6 @@ impl Scanner for FakeScanner {
 	}
 
 	fn scan(&self, scanner: &str, settings: &ScanSettings, on_page: &mut dyn FnMut(DynamicImage)) -> ScanSummary {
-		self.cancelled.store(false, Ordering::Release);
 		self.calls.lock().unwrap().push((scanner.to_string(), *settings));
 		let known = self.scanners.as_ref().is_ok_and(|list| list.iter().any(|info| info.id == scanner));
 		if !known {
@@ -110,6 +109,10 @@ impl Scanner for FakeScanner {
 
 	fn cancel(&self) {
 		self.cancelled.store(true, Ordering::Release);
+	}
+
+	fn prepare(&self) {
+		self.cancelled.store(false, Ordering::Release);
 	}
 }
 
@@ -158,6 +161,20 @@ mod tests {
 		let summary = fake.scan("fake", &ScanSettings::default(), &mut |_| {});
 		assert_eq!(summary.pages, 2);
 		assert_eq!(summary.error.unwrap().kind, ErrorKind::Cancelled);
+	}
+
+	#[test]
+	fn a_cancel_made_before_the_scan_starts_is_kept_and_prepare_forgets_an_old_one() {
+		let fake = FakeScanner::new(vec![scanner()])
+			.with_script(Script::pages(vec![page(1)]))
+			.with_script(Script::pages(vec![page(2)]));
+		fake.prepare();
+		fake.cancel();
+		let summary = fake.scan("fake", &ScanSettings::default(), &mut |_| {});
+		assert_eq!(summary.pages, 0);
+		assert_eq!(summary.error.unwrap().kind, ErrorKind::Cancelled);
+		fake.prepare();
+		assert_eq!(fake.scan("fake", &ScanSettings::default(), &mut |_| {}).pages, 1);
 	}
 
 	#[test]
