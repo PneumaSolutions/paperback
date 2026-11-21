@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: paperback 0.8\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-15 01:48+0000\n"
+"POT-Creation-Date: 2026-11-21 08:28-0700\n"
 "PO-Revision-Date: 2026-02-26 00:00+0100\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -6039,6 +6039,32 @@ msgstr "Lisibilité"
 #, fuzzy
 msgid "Time"
 msgstr "Heure"
+
+#. TRANSLATORS: Shown and announced with how far through a book's chapter the reader is: the number of words left in it; {} is the number. Which of the three forms is used depends on the language's plural rule, and the "many" form's trailing character isn't a typo.
+#: kt swift
+#, fuzzy
+msgid "{} word left"
+msgstr "{} mot restant"
+
+#: kt swift
+#, fuzzy
+msgid "{} words left"
+msgstr "{} mots restants"
+
+#: kt swift
+#, fuzzy
+msgid "{} words left⁣"
+msgstr "{} mots restants⁣"
+
+#. TRANSLATORS: What tapping the progress under the read-aloud bar does: it switches between how far through the whole book the reader is, and how far through the current chapter with how much of it is left
+#: kt swift
+msgid "Show book progress"
+msgstr ""
+
+#. TRANSLATORS: What tapping the progress under the read-aloud bar does: it switches between how far through the whole book the reader is, and how far through the current chapter with how much of it is left
+#: kt swift
+msgid "Show chapter progress"
+msgstr ""
 
 #, fuzzy
 #~ msgid "Announce &Chapter Time"

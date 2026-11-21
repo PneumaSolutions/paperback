@@ -1,4 +1,4 @@
-<!-- machine-translated from doc/readme.md (source-hash: b1e8b46ff69081ba; sections: 64167837,db723a70,df2f4c18,aa6b9ca2,1387e8b7,102030be,8423460b,490ed50c,d3762a01,e9860ee8,15aeaaed); please review and edit as needed -->
+<!-- machine-translated from doc/readme.md (source-hash: aa30a4be334d216d; sections: 64167837,db723a70,df2f4c18,aa6b9ca2,1387e8b7,102030be,8423460b,9a79d445,d3762a01,e9860ee8,15aeaaed); please review and edit as needed -->
 
 # Paperback – 1.1-es verzió
 
@@ -225,6 +225,8 @@ Az iOS- és az Android-alkalmazás ugyanazt az olvasómotort használja, mint az
 Mindkét alkalmazásban kétféleképpen olvashat egy dokumentumot. Szöveges módban a képernyőolvasóval olvassa a szöveget. Felolvasási módban a Paperback olvassa fel a szöveget a Beállításokban kiválasztott beszédhangon, és a háttérben, illetve a zárolási képernyőn is folytatja. A két mód között a További lehetőségek menüben válthat.
 
 A hangoskönyvek, például a DAISY-, M4B- és MP3-könyvek ehelyett a saját hangfelvételüket játsszák le.
+
+Felolvasási módban a képernyő mutatja, hol tart a könyvben. Koppintson rá, és helyette a fejezetet láthatja: a nevét, hol tart a fejezetben, és hány szó maradt belőle, például „3. fejezet, 42%, 1850 szó maradt". Hangoskönyv esetén az időt mutatja, például „3. fejezet, 4:10 / 12:00, 7:50 maradt". Koppintson újra, ha vissza szeretne térni az egész könyvhöz.
 
 ### Az olvasósáv
 

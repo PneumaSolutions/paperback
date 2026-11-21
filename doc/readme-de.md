@@ -1,4 +1,4 @@
-<!-- machine-translated from doc/readme.md (source-hash: b1e8b46ff69081ba; sections: 64167837,db723a70,df2f4c18,aa6b9ca2,1387e8b7,102030be,8423460b,490ed50c,d3762a01,e9860ee8,15aeaaed); please review and edit as needed -->
+<!-- machine-translated from doc/readme.md (source-hash: aa30a4be334d216d; sections: 64167837,db723a70,df2f4c18,aa6b9ca2,1387e8b7,102030be,8423460b,9a79d445,d3762a01,e9860ee8,15aeaaed); please review and edit as needed -->
 
 # Paperback - Version 1.1
 
@@ -225,6 +225,8 @@ Die Apps für iOS und Android nutzen die gleiche Lese-Engine wie die Desktop-Ver
 Jede App hat zwei Möglichkeiten, ein Dokument zu lesen. Im Textmodus liest der Bildschirmleser den Text vor. Im Modus „Vorlesen" liest Paperback den Text mit der Stimme vor, die du in den Einstellungen wählst, und spielt im Hintergrund sowie vom Sperrbildschirm weiter. Wechsle zwischen ihnen im Menü „Weitere Optionen".
 
 Audiobücher wie DAISY, M4B und MP3-Bücher spielen stattdessen ihre eigene Aufnahme ab.
+
+Im Modus „Vorlesen" zeigt der Bildschirm, wie weit du im Buch bist. Tippe darauf, um stattdessen das Kapitel zu sehen: seinen Namen, wie weit du darin bist, und wie viele Wörter noch übrig sind, z. B. „Kapitel 3, 42 %, 1.850 Wörter übrig". Bei einem Audiobuch zeigt es die Zeit an, z. B. „Kapitel 3, 4:10 von 12:00, 7:50 übrig". Tippe erneut darauf, um zur Gesamtansicht des Buchs zurückzukehren.
 
 ### Die Lesezeile
 

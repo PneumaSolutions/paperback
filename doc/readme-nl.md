@@ -1,4 +1,4 @@
-<!-- machine-translated from doc/readme.md (source-hash: b1e8b46ff69081ba; sections: 64167837,db723a70,df2f4c18,aa6b9ca2,1387e8b7,102030be,8423460b,490ed50c,d3762a01,e9860ee8,15aeaaed); please review and edit as needed -->
+<!-- machine-translated from doc/readme.md (source-hash: aa30a4be334d216d; sections: 64167837,db723a70,df2f4c18,aa6b9ca2,1387e8b7,102030be,8423460b,9a79d445,d3762a01,e9860ee8,15aeaaed); please review and edit as needed -->
 
 # Paperback - versie 1.1
 
@@ -225,6 +225,8 @@ De iOS- en Android-apps gebruiken dezelfde leesengine als de desktopversie, dus 
 Elke app heeft twee manieren om een document te lezen. In de tekstmodus lees je de tekst met je schermlezer. In de voorleesmodus leest Paperback de tekst aan je voor met de stem die je in Instellingen kiest, en gaat daarmee door op de achtergrond en vanaf het vergrendelscherm. Wisselen doe je via het menu Meer opties.
 
 Audioboeken, zoals DAISY-, M4B- en MP3-boeken, spelen in plaats daarvan hun eigen opname af.
+
+In de voorleesmodus toont het scherm hoe ver je in het boek bent. Tik erop om in plaats daarvan het hoofdstuk te zien: de naam, hoe ver je erin bent en hoeveel woorden ervan nog over zijn, bijvoorbeeld "Hoofdstuk 3, 42%, 1.850 woorden resterend". Bij een audioboek geeft het de tijd, bijvoorbeeld "Hoofdstuk 3, 4:10 van 12:00, 7:50 resterend". Tik nogmaals om terug te gaan naar het hele boek.
 
 ### De leesbalk
 

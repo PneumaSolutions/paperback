@@ -1,4 +1,4 @@
-<!-- machine-translated from doc/readme.md (source-hash: b1e8b46ff69081ba; sections: 64167837,db723a70,df2f4c18,aa6b9ca2,1387e8b7,102030be,8423460b,490ed50c,d3762a01,e9860ee8,15aeaaed); please review and edit as needed -->
+<!-- machine-translated from doc/readme.md (source-hash: aa30a4be334d216d; sections: 64167837,db723a70,df2f4c18,aa6b9ca2,1387e8b7,102030be,8423460b,9a79d445,d3762a01,e9860ee8,15aeaaed); please review and edit as needed -->
 
 # Paperback - version 1.1
 
@@ -225,6 +225,8 @@ Les applications iOS et Android utilisent le même moteur de lecture que le bure
 Chaque application a deux façons de lire un document. En mode texte, vous lisez le texte avec votre lecteur d'écran. En mode lecture à haute voix, Paperback lit le texte pour vous avec la voix que vous choisissez dans les Paramètres, et continue en arrière-plan et depuis l'écran de verrouillage. Basculez entre les deux depuis le menu Plus d'options.
 
 Les livres audio, comme DAISY, M4B et les livres MP3, lisent leur propre enregistrement à la place.
+
+En mode lecture à haute voix, l'écran montre votre progression dans le livre. Appuyez dessus pour voir le chapitre à la place : son nom, votre progression dans celui-ci, et combien de mots il vous reste à lire, par exemple « Chapitre 3, 42 %, 1 850 mots restants ». Dans un livre audio, il affiche le temps, par exemple « Chapitre 3, 4:10 sur 12:00, 7:50 restants ». Appuyez à nouveau pour revenir au livre entier.
 
 ### La barre de lecture
 

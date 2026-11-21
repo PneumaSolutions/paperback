@@ -1,4 +1,4 @@
-<!-- machine-translated from doc/readme.md (source-hash: b1e8b46ff69081ba; sections: 64167837,db723a70,df2f4c18,aa6b9ca2,1387e8b7,102030be,8423460b,490ed50c,d3762a01,e9860ee8,15aeaaed); please review and edit as needed -->
+<!-- machine-translated from doc/readme.md (source-hash: aa30a4be334d216d; sections: 64167837,db723a70,df2f4c18,aa6b9ca2,1387e8b7,102030be,8423460b,9a79d445,d3762a01,e9860ee8,15aeaaed); please review and edit as needed -->
 
 # Paperback - phiên bản 1.1
 
@@ -225,6 +225,8 @@ Các ứng dụng iOS và Android sử dụng cùng một công cụ đọc như
 Mỗi ứng dụng có hai cách để đọc tài liệu. Ở chế độ văn bản, bạn đọc văn bản bằng trình đọc màn hình của mình. Ở chế độ đọc to, Paperback đọc văn bản cho bạn bằng giọng nói bạn chọn trong Settings, và tiếp tục ở nền và từ màn hình khóa. Chuyển đổi giữa chúng từ menu More Options.
 
 Các audiobook, như DAISY, M4B và sách MP3, phát bản ghi âm của riêng chúng thay thế.
+
+Ở chế độ đọc to, màn hình hiển thị tiến độ của bạn trong sách. Nhấn vào đó để xem chương thay thế: tên của nó, tiến độ của bạn trong chương đó và còn bao nhiêu từ, ví dụ: "Chapter 3, 42%, 1,850 words left". Trong sách âm thanh, nó hiển thị thời gian, ví dụ: "Chapter 3, 4:10 of 12:00, 7:50 left". Nhấn lại để quay lại toàn bộ sách.
 
 ### Thanh đọc
 

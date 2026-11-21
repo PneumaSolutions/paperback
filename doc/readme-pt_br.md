@@ -1,4 +1,4 @@
-<!-- machine-translated from doc/readme.md (source-hash: b1e8b46ff69081ba; sections: 64167837,db723a70,df2f4c18,aa6b9ca2,1387e8b7,102030be,8423460b,490ed50c,d3762a01,e9860ee8,15aeaaed); please review and edit as needed -->
+<!-- machine-translated from doc/readme.md (source-hash: aa30a4be334d216d; sections: 64167837,db723a70,df2f4c18,aa6b9ca2,1387e8b7,102030be,8423460b,9a79d445,d3762a01,e9860ee8,15aeaaed); please review and edit as needed -->
 
 # Paperback - versão 1.1
 
@@ -225,6 +225,8 @@ Os aplicativos iOS e Android usam o mesmo mecanismo de leitura que o desktop, en
 Cada aplicativo tem duas formas de ler um documento. No modo texto, você lê o texto com seu leitor de tela. No modo de leitura em voz alta, Paperback lê o texto para você com a voz que você escolher em Settings, e continua funcionando em segundo plano e na tela de bloqueio. Alterne entre eles no menu More Options.
 
 Audiolivros, como DAISY, M4B e livros MP3, reproduzem sua própria gravação.
+
+No modo de leitura em voz alta, a tela mostra o quanto você avançou no livro. Toque nela para ver o capítulo: seu nome, o quanto você avançou nele e quantas palavras restam, por exemplo, "Capítulo 3, 42%, 1.850 palavras restantes". Em um audiolivro mostra o tempo, por exemplo, "Capítulo 3, 4:10 de 12:00, 7:50 restantes". Toque novamente para voltar ao livro todo.
 
 ### A barra de leitura
 
