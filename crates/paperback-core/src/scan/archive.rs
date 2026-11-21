@@ -1,9 +1,10 @@
 //! Scanned pages are kept as PNG files in a comic book archive (`.cbz`), so the comic parser and renderer read them, and any comic reader can open one.
 //! A `ComicInfo.xml` names the scan and marks it as Paperback's with `ScanInformation`, which is how a scan's OCR lines are told apart from a comic's balloons and joined into paragraphs.
-//! Every change writes a whole new archive beside the old one and renames it over it, so a reader opening the file mid-scan, or a crash mid-write, never sees half a page.
+//! A page is appended in place ([`ZipWriter::new_append`]), so a long feeder run writes each page once rather than rewriting the archive every time. The first page, a page replaced by a rescan, and Save Scan As each write a whole new archive beside the old one and rename it over it.
+//! An append rewrites only the central directory at the end, so a crash during one can leave the archive in progress unreadable; it's only ever the scan in progress, never a saved one.
 
 use std::{
-	fs::{self, File},
+	fs::{self, File, OpenOptions},
 	io::{self, BufReader, BufWriter, Cursor, Read as _, Write as _},
 	path::{Path, PathBuf},
 };
@@ -25,6 +26,8 @@ pub const MAXIMUM_PAGES: usize = 9999;
 pub struct ScanArchive {
 	path: PathBuf,
 	title: String,
+	/// Kept here, since this is the archive's only writer, so adding a page doesn't read the archive first.
+	pages: usize,
 }
 
 impl ScanArchive {
@@ -40,18 +43,20 @@ impl ScanArchive {
 			path = dir.join(format!("{title}.{EXTENSION}"));
 			counter += 1;
 		}
-		Ok(Self { path, title })
+		Ok(Self { path, title, pages: 0 })
 	}
 
-	#[must_use]
-	pub fn open(path: &Path) -> Self {
+	/// An archive written before, such as the source of Save Scan As. Its pages are counted once, here.
+	pub fn open(path: &Path) -> Result<Self> {
 		let title = path.file_stem().map(|stem| stem.to_string_lossy().into_owned()).unwrap_or_default();
-		Self { path: path.to_path_buf(), title }
+		let mut archive = Self { path: path.to_path_buf(), title, pages: 0 };
+		archive.pages = page_names(&mut archive.read()?).len();
+		Ok(archive)
 	}
 
 	/// A copy at `destination` titled `title`, for Save Scan As. The pages are copied as they are; only the title changes.
 	pub fn copy_to(&self, destination: &Path, title: &str) -> Result<Self> {
-		let copy = Self { path: destination.to_path_buf(), title: title.to_string() };
+		let copy = Self { path: destination.to_path_buf(), title: title.to_string(), pages: self.pages };
 		let mut archive = self.read()?;
 		let dir = destination.parent().unwrap_or_else(|| Path::new("."));
 		let temp = tempfile::Builder::new().prefix(".scan-").suffix(".tmp").tempfile_in(dir)?;
@@ -72,35 +77,41 @@ impl ScanArchive {
 		&self.path
 	}
 
-	pub fn page_count(&self) -> Result<usize> {
-		if !self.path.exists() {
-			return Ok(0);
-		}
-		Ok(page_names(&mut self.read()?).len())
+	#[must_use]
+	pub const fn page_count(&self) -> usize {
+		self.pages
 	}
 
 	/// Returns the new page's number, counting from 1.
-	pub fn append_page(&self, page: &DynamicImage) -> Result<usize> {
+	pub fn append_page(&mut self, page: &DynamicImage) -> Result<usize> {
 		self.append_png(&encode_png(page)?)
 	}
 
-	pub fn append_png(&self, png: &[u8]) -> Result<usize> {
-		let existing = self.page_count()?;
-		if existing >= MAXIMUM_PAGES {
+	pub fn append_png(&mut self, png: &[u8]) -> Result<usize> {
+		if self.pages >= MAXIMUM_PAGES {
 			anyhow::bail!("a scanned document holds at most {MAXIMUM_PAGES} pages");
 		}
-		let number = existing + 1;
-		self.rewrite(None, Some((entry_name(number), png)))?;
+		let number = self.pages + 1;
+		if self.path.exists() {
+			let file = OpenOptions::new().read(true).write(true).open(&self.path)?;
+			let mut writer = ZipWriter::new_append(file)?;
+			writer.start_file(entry_name(number), page_options())?;
+			writer.write_all(png)?;
+			writer.finish()?.sync_all()?;
+		} else {
+			self.rewrite(None, Some((entry_name(number), png)))?;
+		}
+		self.pages = number;
 		Ok(number)
 	}
 
 	/// For a page that read better turned around: the image the reader's OCR and any later Batch OCR see is the upright one.
-	pub fn replace_page(&self, number: usize, page: &DynamicImage) -> Result<()> {
+	pub fn replace_page(&mut self, number: usize, page: &DynamicImage) -> Result<()> {
 		self.replace_png(number, &encode_png(page)?)
 	}
 
-	/// Also for a page scanned again because it wasn't lined up.
-	pub fn replace_png(&self, number: usize, png: &[u8]) -> Result<()> {
+	/// For a page scanned again because it wasn't lined up. Rare, so the archive is rewritten whole.
+	pub fn replace_png(&mut self, number: usize, png: &[u8]) -> Result<()> {
 		let names = page_names(&mut self.read()?);
 		let name = names.get(number.wrapping_sub(1)).with_context(|| format!("page {number} is not in the scan"))?;
 		self.rewrite(Some(name.as_str()), Some((name.clone(), png)))
@@ -116,8 +127,7 @@ impl ScanArchive {
 		let dir = self.path.parent().unwrap_or_else(|| Path::new("."));
 		let temp = tempfile::Builder::new().prefix(".scan-").suffix(".tmp").tempfile_in(dir)?;
 		let mut writer = ZipWriter::new(BufWriter::new(temp));
-		// PNG is compressed already, so deflating it again only costs time.
-		let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+		let options = page_options();
 		let mut added = added;
 		if !self.path.exists() {
 			self.write_info(&mut writer)?;
@@ -160,6 +170,11 @@ fn finish(writer: ZipWriter<BufWriter<tempfile::NamedTempFile>>, destination: &P
 	temp.as_file().sync_all()?;
 	temp.persist(destination).map_err(|error| error.error)?;
 	Ok(())
+}
+
+/// PNG is compressed already, so deflating it again only costs time.
+fn page_options() -> SimpleFileOptions {
+	SimpleFileOptions::default().compression_method(CompressionMethod::Stored)
 }
 
 fn is_info(name: &str) -> bool {
@@ -240,19 +255,41 @@ mod tests {
 	#[test]
 	fn pages_are_added_in_order_and_numbered_from_one() {
 		let dir = tempfile::tempdir().unwrap();
-		let archive = ScanArchive::create(dir.path(), "Scan").unwrap();
-		assert_eq!(archive.page_count().unwrap(), 0);
+		let mut archive = ScanArchive::create(dir.path(), "Scan").unwrap();
+		assert_eq!(archive.page_count(), 0);
 		assert!(!archive.path().exists(), "nothing is written before the first page");
 		assert_eq!(archive.append_page(&page(1)).unwrap(), 1);
 		assert_eq!(archive.append_page(&page(2)).unwrap(), 2);
 		assert_eq!(archive.append_page(&page(3)).unwrap(), 3);
 		assert_eq!(widths(&archive), vec![1, 2, 3]);
+		assert_eq!(archive.page_count(), 3);
+		assert_eq!(
+			ScanArchive::open(archive.path()).unwrap().page_count(),
+			3,
+			"appended pages are all in the central directory"
+		);
+	}
+
+	#[test]
+	fn appending_writes_each_page_once() {
+		let dir = tempfile::tempdir().unwrap();
+		let mut archive = ScanArchive::create(dir.path(), "Scan").unwrap();
+		let png = encode_png(&DynamicImage::new_luma8(400, 400)).unwrap();
+		archive.append_png(&png).unwrap();
+		let after_one = fs::metadata(archive.path()).unwrap().len();
+		for _ in 0..20 {
+			archive.append_png(&png).unwrap();
+		}
+		let after_many = fs::metadata(archive.path()).unwrap().len();
+		// Each page adds its own bytes and a little directory; nothing is written twice into the file.
+		let per_page = (after_many - after_one) / 20;
+		assert!(per_page < png.len() as u64 + 200, "{per_page} bytes a page for a {} byte page", png.len());
 	}
 
 	#[test]
 	fn a_replaced_page_keeps_its_place() {
 		let dir = tempfile::tempdir().unwrap();
-		let archive = ScanArchive::create(dir.path(), "Scan").unwrap();
+		let mut archive = ScanArchive::create(dir.path(), "Scan").unwrap();
 		for width in 1..=3 {
 			archive.append_page(&page(width)).unwrap();
 		}
@@ -265,7 +302,7 @@ mod tests {
 	#[test]
 	fn a_new_scan_never_takes_an_existing_file_s_name() {
 		let dir = tempfile::tempdir().unwrap();
-		let first = ScanArchive::create(dir.path(), "Scan").unwrap();
+		let mut first = ScanArchive::create(dir.path(), "Scan").unwrap();
 		first.append_page(&page(1)).unwrap();
 		let second = ScanArchive::create(dir.path(), "Scan").unwrap();
 		assert_ne!(first.path(), second.path());
@@ -282,7 +319,7 @@ mod tests {
 	#[test]
 	fn no_temporary_file_is_left_behind() {
 		let dir = tempfile::tempdir().unwrap();
-		let archive = ScanArchive::create(dir.path(), "Scan").unwrap();
+		let mut archive = ScanArchive::create(dir.path(), "Scan").unwrap();
 		archive.append_page(&page(1)).unwrap();
 		archive.replace_page(1, &page(2)).unwrap();
 		let names: Vec<String> = fs::read_dir(dir.path())
@@ -295,7 +332,7 @@ mod tests {
 	#[test]
 	fn a_scan_opens_as_a_comic_with_its_title_and_one_placeholder_per_page() {
 		let dir = tempfile::tempdir().unwrap();
-		let archive = ScanArchive::create(dir.path(), "Letter <draft>").unwrap();
+		let mut archive = ScanArchive::create(dir.path(), "Letter <draft>").unwrap();
 		archive.append_page(&page(8)).unwrap();
 		archive.append_page(&page(9)).unwrap();
 		let path = archive.path().to_string_lossy().into_owned();
@@ -324,7 +361,7 @@ mod tests {
 	#[test]
 	fn a_copy_keeps_the_pages_and_takes_the_new_title() {
 		let dir = tempfile::tempdir().unwrap();
-		let archive = ScanArchive::create(dir.path(), "Scan").unwrap();
+		let mut archive = ScanArchive::create(dir.path(), "Scan").unwrap();
 		archive.append_page(&page(3)).unwrap();
 		archive.append_page(&page(4)).unwrap();
 		let saved = archive.copy_to(&dir.path().join("Bank letter.cbz"), "Bank & letter").unwrap();
@@ -341,7 +378,7 @@ mod tests {
 		use std::os::unix::fs::PermissionsExt as _;
 		let dir = tempfile::tempdir().unwrap();
 		let scans = dir.path().join("scans");
-		let archive = ScanArchive::create(&scans, "Scan").unwrap();
+		let mut archive = ScanArchive::create(&scans, "Scan").unwrap();
 		archive.append_page(&page(1)).unwrap();
 		assert_eq!(fs::metadata(&scans).unwrap().permissions().mode() & 0o777, 0o700);
 		assert_eq!(fs::metadata(archive.path()).unwrap().permissions().mode() & 0o077, 0);

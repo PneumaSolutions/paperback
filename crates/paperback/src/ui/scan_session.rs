@@ -10,6 +10,7 @@ use std::{
 	rc::Rc,
 	sync::{Arc, Mutex, mpsc},
 	thread,
+	time::Duration,
 };
 
 use paperback_core::{
@@ -18,7 +19,7 @@ use paperback_core::{
 	ocr::{RecognizedLine, save_pages, saved_pages_file},
 	scan::{
 		archive::{ScanArchive, encode_png},
-		check::Turn,
+		check::{TextAmount, Turn},
 	},
 };
 use paperback_scan::{DynamicImage, ErrorKind, ScanSettings, ScanSummary, Scanner, ScannerInfo, Source, SystemScanner};
@@ -40,7 +41,7 @@ use crate::{
 	ui::{
 		dialogs::scan::{ScanningWindow, SettingsChoice, choose_save_path, show_scan_settings_dialog},
 		document_manager::{DocumentManager, display_title},
-		main_window::{MainWindow, update_title_from_manager},
+		main_window::update_title_from_manager,
 		menu,
 		navigation::{announce, announce_for_command},
 	},
@@ -76,40 +77,67 @@ struct Session {
 	/// A flatbed page that may not be lined up. Rescan replaces it; scanning the next page goes on without it.
 	rescan: Option<usize>,
 	run_pages: usize,
-	run_blanks: usize,
 	run_dropped: usize,
 	told_ocr_problem: bool,
 	opened: bool,
+	/// Pages or text not yet shown in the tab. Re-reading the tab is put off a moment so a run's pages share one re-read, and, once the Scanning window is closed and the reader may be reading, until the run ends.
+	dirty: bool,
+	flush_scheduled: bool,
 }
 
 enum Event {
-	Added {
+	/// A page to add (or, for a rescan, to put in place of `number`), already the right way up, with its text.
+	Page {
 		number: usize,
 		png: Vec<u8>,
 		replaces: bool,
-	},
-	Turned {
-		number: usize,
-		png: Vec<u8>,
-	},
-	Read {
-		number: usize,
 		lines: Vec<RecognizedLine>,
-		words: usize,
+		amount: TextAmount,
 		turn: Option<Turn>,
+		/// Whether the page may not be lined up, and if so whether text touches an edge.
 		out_of_line: Option<bool>,
+		/// A one-sided feeder page with nothing on it, kept because skipping wasn't asked for.
+		looks_blank: bool,
 		error: Option<OcrError>,
 	},
+	/// A blank flatbed page, which the window asks about.
 	Blank,
-	/// A side of a two-sided scan with no text on it.
+	/// A page or side left out because skipping blank pages was asked for.
 	Dropped,
+	/// Time to show what's arrived in the tab.
+	Flush,
 	Ended(ScanSummary),
 }
 
+/// Pages travel to the OCR thread as PNG, a fraction of their decoded size, so a fast feeder ahead of OCR doesn't pile up decoded pages.
 enum ToOcr {
-	Page(DynamicImage),
+	Page(Vec<u8>),
 	End(ScanSummary),
 }
+
+#[derive(Debug, PartialEq, Eq)]
+enum Refresh {
+	Now,
+	Soon,
+	AlreadyDue,
+	AtEnd,
+}
+
+/// The first page opens the document at once. While the Scanning window is open, re-reading waits a moment so pages arriving together share it. Once it's closed the reader may be reading in the tab, and re-reading the text under the caret would interrupt the screen reader, so it waits for the run to end and happens once.
+fn when_to_refresh(opened: bool, window_open: bool, scheduled: bool) -> Refresh {
+	if !opened {
+		Refresh::Now
+	} else if !window_open {
+		Refresh::AtEnd
+	} else if scheduled {
+		Refresh::AlreadyDue
+	} else {
+		Refresh::Soon
+	}
+}
+
+/// Long enough for a feeder's next page to share the re-read, short enough that the tab keeps up.
+const FLUSH_DELAY: Duration = Duration::from_millis(800);
 
 /// File > Scan document.
 pub fn scan_document(
@@ -180,9 +208,10 @@ fn begin(shared: Shared, scanner: &ScannerInfo, settings: ScanSettings, skip_bla
 		remembered.remember(scanner, settings, skip_blank_sides);
 		remembered.save(&config);
 	}
-	// Skipping is opt-in: OCR finds no words in a photo, a signature or handwriting, and those sides are worth keeping.
+	// Skipping is opt-in for both feeder modes: OCR finds no words in a photo, a signature or handwriting, and those pages are worth keeping.
 	let mode = match settings.source {
 		Source::Flatbed => Mode::Flatbed,
+		Source::Feeder if skip_blank_sides => Mode::FeederSkip,
 		Source::Feeder => Mode::Feeder,
 		Source::FeederDuplex if skip_blank_sides => Mode::BothSidesSmart,
 		Source::FeederDuplex => Mode::BothSidesAll,
@@ -219,10 +248,11 @@ fn begin(shared: Shared, scanner: &ScannerInfo, settings: ScanSettings, skip_bla
 		asking_blank: false,
 		rescan: None,
 		run_pages: 0,
-		run_blanks: 0,
 		run_dropped: 0,
 		told_ocr_problem: false,
 		opened: false,
+		dirty: false,
+		flush_scheduled: false,
 	}));
 	start_run(None);
 	window.dialog.show_modal();
@@ -293,7 +323,6 @@ fn start_run(replace: Option<usize>) {
 		session.asking_blank = false;
 		session.rescan = None;
 		session.run_pages = 0;
-		session.run_blanks = 0;
 		session.run_dropped = 0;
 		session.show_buttons();
 		if let Some(window) = session.window {
@@ -324,7 +353,14 @@ fn start_run(replace: Option<usize>) {
 	}
 	let run = move || {
 		let summary = scanner.scan(&scanner_id, &settings, &mut |page| {
-			let _ = to_ocr.send(ToOcr::Page(page));
+			// Encoded here, while the driver goes on with the next page in its own thread (or its own buffers, for SANE).
+			match encode_png(&page) {
+				Ok(png) => {
+					drop(page);
+					let _ = to_ocr.send(ToOcr::Page(png));
+				}
+				Err(error) => tracing::warn!(%error, "a scanned page could not be encoded"),
+			}
 		});
 		let _ = to_ocr.send(ToOcr::End(summary));
 	};
@@ -343,7 +379,7 @@ fn read_pages(from_scanner: &mpsc::Receiver<ToOcr>, first: usize, replaces: bool
 	sort_pages(from_scanner, first, replaces, mode, &mut pages::recognize_with_engine, &mut post);
 }
 
-/// [`read_pages`] with the OCR engine and the way out passed in, so tests can run a fake scanner through it.
+/// [`read_pages`] with the OCR engine and the way out passed in, so tests can run a fake scanner through it. A page is read before it's added, so it goes into the document once, already the right way up, with its text.
 fn sort_pages(
 	from_scanner: &mpsc::Receiver<ToOcr>,
 	first: usize,
@@ -354,88 +390,87 @@ fn sort_pages(
 ) {
 	let mut number = first;
 	for message in from_scanner {
-		let page = match message {
-			ToOcr::Page(page) => page,
+		let png = match message {
+			ToOcr::Page(png) => png,
 			ToOcr::End(summary) => {
 				post(Event::Ended(summary));
 				return;
 			}
 		};
+		// Our own encoding of a page the scanner library already checked.
+		let page = match image::load_from_memory(&png) {
+			Ok(page) => page,
+			Err(error) => {
+				tracing::warn!(%error, "a scanned page could not be decoded again");
+				continue;
+			}
+		};
 		let kept = match mode {
-			Mode::Flatbed | Mode::Feeder => read_then_add(&page, number, replaces, false, recognize, post),
-			Mode::BothSidesAll => read_then_add(&page, number, false, true, recognize, post),
-			Mode::BothSidesSmart => add_if_it_has_text(&page, number, recognize, post),
+			Mode::Flatbed if pages::is_blank(&page) => {
+				post(Event::Blank);
+				false
+			}
+			Mode::Flatbed => {
+				post(page_event(number, png, replaces, pages::read(&page, recognize), false));
+				true
+			}
+			Mode::Feeder | Mode::BothSidesAll => {
+				let blank = pages::is_blank(&page);
+				let read = if blank { pages::ReadPage::default() } else { pages::read(&page, recognize) };
+				post(page_event(number, png, false, read, blank && mode == Mode::Feeder));
+				true
+			}
+			Mode::FeederSkip | Mode::BothSidesSmart => {
+				let read = (!pages::is_blank(&page)).then(|| pages::read(&page, recognize));
+				if let Some(read) = read.filter(|read| pages::side_has_text(read, &page)) {
+					post(page_event(number, png, false, read, false));
+					true
+				} else {
+					post(Event::Dropped);
+					false
+				}
+			}
 		};
 		// A rescan is one flatbed page, so only pages added at the end move the count on.
-		if kept && (!replaces || mode != Mode::Flatbed) {
+		if kept && !replaces {
 			number += 1;
 		}
 	}
 }
 
-/// The page goes into the document before OCR, so it can be read as an image while its text is coming. Returns whether it was added.
-fn read_then_add(
-	page: &DynamicImage,
-	number: usize,
-	replaces: bool,
-	keep_blank: bool,
-	recognize: &mut Recognize<'_>,
-	post: &mut dyn FnMut(Event),
-) -> bool {
-	if !keep_blank && pages::is_blank(page) {
-		post(Event::Blank);
-		return false;
-	}
-	let Some(png) = png_of(page) else { return false };
-	post(Event::Added { number, png, replaces });
-	let read = pages::read(page, recognize);
-	if let Some(png) = read.turned.as_ref().and_then(png_of) {
-		post(Event::Turned { number, png });
-	}
-	post(read_event(number, read));
-	true
-}
-
-/// One side of a two-sided scan, kept only if OCR finds real words on it, the right way up.
-fn add_if_it_has_text(
-	page: &DynamicImage,
-	number: usize,
-	recognize: &mut Recognize<'_>,
-	post: &mut dyn FnMut(Event),
-) -> bool {
-	if pages::is_blank(page) {
-		post(Event::Dropped);
-		return false;
-	}
-	let read = pages::read(page, recognize);
-	if !pages::side_has_text(&read, page) {
-		post(Event::Dropped);
-		return false;
-	}
-	let Some(png) = png_of(read.turned.as_ref().unwrap_or(page)) else { return false };
-	post(Event::Added { number, png, replaces: false });
-	post(read_event(number, read));
-	true
-}
-
-fn png_of(page: &DynamicImage) -> Option<Vec<u8>> {
-	encode_png(page).map_err(|error| tracing::warn!(%error, "a scanned page could not be encoded")).ok()
-}
-
-fn read_event(number: usize, read: pages::ReadPage) -> Event {
+fn page_event(number: usize, png: Vec<u8>, replaces: bool, read: pages::ReadPage, looks_blank: bool) -> Event {
+	let png = match read.turned.as_ref().map(encode_png) {
+		Some(Ok(turned)) => turned,
+		Some(Err(error)) => {
+			tracing::warn!(%error, "a turned page could not be encoded; keeping it as scanned");
+			png
+		}
+		None => png,
+	};
 	// An engine that failed says nothing about how the page lies.
-	let out_of_line = (read.error.is_none() && (read.little_text || read.cut_off)).then_some(read.cut_off);
-	Event::Read { number, lines: read.lines, words: read.words, turn: read.turn, out_of_line, error: read.error }
+	let out_of_line =
+		(read.error.is_none() && !looks_blank && (read.little_text || read.cut_off)).then_some(read.cut_off);
+	Event::Page {
+		number,
+		png,
+		replaces,
+		lines: read.lines,
+		amount: read.amount,
+		turn: read.turn,
+		out_of_line,
+		looks_blank,
+		error: read.error,
+	}
 }
 
 fn post(event: Event) {
-	crate::ui::app::when_unlocked(move |window| handle(window, event));
+	crate::ui::app::when_unlocked(move |_| handle(event));
 }
 
-fn handle(window: &'static MainWindow, event: Event) {
+fn handle(event: Event) {
 	let ended_and_closed = SESSION.with_borrow_mut(|slot| {
 		let Some(session) = slot.as_mut() else { return false };
-		session.apply(window, event);
+		session.apply(event);
 		!session.running && session.window.is_none()
 	});
 	if ended_and_closed {
@@ -454,13 +489,13 @@ impl Session {
 		}
 	}
 
-	fn apply(&mut self, window: &'static MainWindow, event: Event) {
+	fn apply(&mut self, event: Event) {
 		// Closed without saving, and so deleted: what's still coming has nowhere to go, and must not bring the scan back.
 		if self.pages > 0 && !self.archive.path().exists() {
 			return;
 		}
 		match event {
-			Event::Added { number, png, replaces } => {
+			Event::Page { number, png, replaces, lines, amount, turn, out_of_line, looks_blank, error } => {
 				let stored = if replaces {
 					self.archive.replace_png(number, &png)
 				} else {
@@ -468,89 +503,113 @@ impl Session {
 				};
 				if let Err(error) = stored {
 					tracing::warn!(%error, "a scanned page could not be saved");
-					self.say(
-						&messages::scan_failed(&paperback_scan::ScanError {
-							kind: ErrorKind::Other,
-							message: error.to_string(),
-						}),
-						false,
-					);
+					let error = paperback_scan::ScanError { kind: ErrorKind::Other, message: error.to_string() };
+					self.say(&messages::scan_failed(&error), false);
 					return;
 				}
-				if replaces {
-					self.recognized.remove(&number);
-				} else {
+				if !replaces {
 					self.pages += 1;
 					self.run_pages += 1;
 				}
-				self.refresh(window);
-			}
-			Event::Turned { number, png } => {
-				if let Err(error) = self.archive.replace_png(number, &png) {
-					tracing::warn!(%error, "a turned page could not be saved");
-				}
-				self.refresh(window);
-			}
-			Event::Read { number, lines, words, turn, out_of_line, error } => {
 				self.recognized.insert(number, lines);
-				self.refresh(window);
-				let mut message = messages::page_read(number, words, turn);
-				if let Some(error) = error
-					&& !self.told_ocr_problem
-				{
-					self.told_ocr_problem = true;
-					message = format!("{message} {}", ocr::message(&error));
-				}
-				if let Some(cut_off) = out_of_line {
-					// Said without stopping: Enter still scans the next page, and Rescan is there for this one.
-					let can_rescan = !self.feeder() && self.window.is_some();
-					message = format!("{message} {}", messages::not_lined_up(cut_off, can_rescan));
-					if can_rescan {
-						self.rescan = Some(number);
-						self.show_buttons();
-					}
-				} else if !self.feeder() && self.pages == 1 {
-					message = format!("{message} {}", messages::flatbed_prompt());
-				}
+				self.mark_dirty();
+				let message = self.page_message(number, amount, turn, out_of_line, looks_blank, error);
 				self.say(&message, self.feeder());
 			}
 			Event::Dropped => self.run_dropped += 1,
 			Event::Blank => {
-				if self.feeder() {
-					self.run_blanks += 1;
-					self.say(&messages::blank_left_out(), true);
-				} else {
-					self.asking_blank = true;
-					self.say(&messages::blank_on_flatbed(self.pages + 1), false);
+				self.asking_blank = true;
+				self.show_buttons();
+				self.say(&messages::blank_on_flatbed(self.pages + 1), false);
+			}
+			Event::Flush => {
+				self.flush_scheduled = false;
+				// Once the window is closed the reader may be reading, so the tab waits for the run to end.
+				if self.dirty && self.window.is_some() {
+					self.flush();
 				}
 			}
 			Event::Ended(summary) => {
 				self.running = false;
+				if self.dirty {
+					self.flush();
+				}
 				self.show_buttons();
-				match summary.error {
-					Some(error) if self.feeder() && error.kind == ErrorKind::Other && self.run_pages > 0 => {
-						// A feeder that jams after some pages keeps them; say both.
-						let message = format!(
-							"{} {}",
-							messages::scan_failed(&error),
-							messages::feeder_finished(self.run_pages, self.run_blanks)
-						);
-						self.say(&message, true);
-					}
-					Some(error) => self.say(&messages::scan_failed(&error), false),
-					None if self.mode == Mode::BothSidesSmart => {
-						let sheets = (self.run_pages + self.run_dropped).div_ceil(2);
-						self.say(&messages::both_sides_finished(sheets, self.run_pages, self.run_dropped), true);
-					}
-					None if self.feeder() && self.run_pages == 0 && self.run_blanks > 0 => {
-						self.say(&messages::all_blank(), true);
-					}
-					None if self.feeder() => {
-						self.say(&messages::feeder_finished(self.run_pages, self.run_blanks), true);
-					}
-					None => {}
+				self.summarize(summary);
+			}
+		}
+	}
+
+	fn page_message(
+		&mut self,
+		number: usize,
+		amount: TextAmount,
+		turn: Option<Turn>,
+		out_of_line: Option<bool>,
+		looks_blank: bool,
+		error: Option<OcrError>,
+	) -> String {
+		let mut message = messages::page_read(number, amount, turn);
+		if let Some(error) = error
+			&& !self.told_ocr_problem
+		{
+			self.told_ocr_problem = true;
+			message = format!("{message} {}", ocr::message(&error));
+		}
+		if looks_blank {
+			message = format!("{message} {}", messages::looks_blank());
+		}
+		if let Some(cut_off) = out_of_line {
+			// Said without stopping: Enter still scans the next page, and Rescan is there for this one.
+			let can_rescan = !self.feeder() && self.window.is_some();
+			message = format!("{message} {}", messages::not_lined_up(cut_off, can_rescan));
+			if can_rescan {
+				self.rescan = Some(number);
+				self.show_buttons();
+			}
+		} else if !self.feeder() && self.pages == 1 {
+			message = format!("{message} {}", messages::flatbed_prompt());
+		}
+		message
+	}
+
+	fn summarize(&self, summary: ScanSummary) {
+		let skipping = matches!(self.mode, Mode::FeederSkip | Mode::BothSidesSmart);
+		let finished = || match self.mode {
+			Mode::BothSidesSmart => {
+				let sheets = (self.run_pages + self.run_dropped).div_ceil(2);
+				messages::both_sides_finished(sheets, self.run_pages, self.run_dropped)
+			}
+			_ => messages::feeder_finished(self.run_pages, if skipping { self.run_dropped } else { 0 }),
+		};
+		match summary.error {
+			Some(error) if self.feeder() && error.kind == ErrorKind::Other && self.run_pages > 0 => {
+				// A feeder that jams after some pages keeps them; say both.
+				self.say(&format!("{} {}", messages::scan_failed(&error), finished()), true);
+			}
+			Some(error) => self.say(&messages::scan_failed(&error), false),
+			None if skipping && self.run_pages == 0 && self.run_dropped > 0 => self.say(&messages::all_blank(), true),
+			None if self.feeder() => self.say(&finished(), true),
+			None => {}
+		}
+	}
+
+	fn mark_dirty(&mut self) {
+		self.dirty = true;
+		match when_to_refresh(self.opened, self.window.is_some(), self.flush_scheduled) {
+			Refresh::Now => self.flush(),
+			Refresh::Soon => {
+				self.flush_scheduled = true;
+				let spawned = thread::Builder::new().name("paperback-scan-flush".into()).spawn(|| {
+					thread::sleep(FLUSH_DELAY);
+					post(Event::Flush);
+				});
+				if spawned.is_err() {
+					self.flush_scheduled = false;
+					self.flush();
 				}
 			}
+			Refresh::AlreadyDue | Refresh::AtEnd => {}
 		}
 	}
 
@@ -566,8 +625,9 @@ impl Session {
 		}
 	}
 
-	/// The recognized text is kept where reopening the document looks for it, under the archive's current contents, and the tab re-read.
-	fn refresh(&mut self, window: &'static MainWindow) {
+	/// The recognized text is kept where reopening the document looks for it, under the archive's current contents, and the tab re-read once for everything that arrived since the last time.
+	fn flush(&mut self) {
+		self.dirty = false;
 		let path = self.archive.path().to_path_buf();
 		if !path.exists() {
 			return;
@@ -585,8 +645,8 @@ impl Session {
 		if let Err(error) = save_pages(&cache, &pages) {
 			tracing::warn!(%error, "could not keep a scanned document's text");
 		}
-		let dm = window.document_manager();
-		let shown = dm.lock().unwrap().show_scan(dm, &path);
+		let dm = Rc::clone(&self.shared.dm);
+		let shown = dm.lock().unwrap().show_scan(&dm, &path);
 		if shown && !self.opened {
 			self.opened = true;
 			let manager = dm.lock().unwrap();
@@ -661,6 +721,8 @@ fn finish() {
 		session.window = None;
 		if session.running {
 			session.shared.scanner.cancel();
+		} else if session.dirty {
+			session.flush();
 		}
 		(Rc::clone(&session.shared.dm), session.shared.label, session.pages, session.running)
 	}) else {
@@ -738,18 +800,19 @@ mod tests {
 		Ok((vec![RecognizedLine { text: text.into(), words }], image.width(), image.height()))
 	}
 
-	/// Runs the fake scanner's pages through the OCR thread's sorting, as a real run does, and returns what it would post.
+	/// Runs the fake scanner's pages through the OCR thread's sorting, as a real run does (encoded to PNG on the way), and returns what it would post.
 	fn run(mode: Mode, sides: Vec<DynamicImage>) -> Vec<Event> {
 		let info = ScannerInfo {
 			id: "fake".into(),
 			name: "Fake".into(),
-			sources: vec![Source::FeederDuplex, Source::Feeder],
+			sources: vec![Source::Feeder, Source::FeederDuplex],
 			problem: None,
 		};
 		let scanner = FakeScanner::new(vec![info]).with_script(Script::pages(sides));
 		let (to_ocr, from_scanner) = mpsc::channel();
 		let settings = ScanSettings { source: Source::FeederDuplex, ..ScanSettings::default() };
-		let summary = scanner.scan("fake", &settings, &mut |page| to_ocr.send(ToOcr::Page(page)).unwrap());
+		let summary =
+			scanner.scan("fake", &settings, &mut |page| to_ocr.send(ToOcr::Page(encode_png(&page).unwrap())).unwrap());
 		to_ocr.send(ToOcr::End(summary)).unwrap();
 		let mut events = Vec::new();
 		sort_pages(&from_scanner, 1, false, mode, &mut engine, &mut |event| events.push(event));
@@ -759,7 +822,7 @@ mod tests {
 	fn added(events: &[Event]) -> Vec<usize> {
 		events
 			.iter()
-			.filter_map(|event| if let Event::Added { number, .. } = event { Some(*number) } else { None })
+			.filter_map(|event| if let Event::Page { number, .. } = event { Some(*number) } else { None })
 			.collect()
 	}
 
@@ -773,7 +836,15 @@ mod tests {
 	}
 
 	#[test]
-	fn both_sides_keeps_only_the_sides_with_text() {
+	fn the_tab_is_re_read_once_for_pages_arriving_together_and_not_while_the_reader_reads() {
+		assert_eq!(when_to_refresh(false, true, false), Refresh::Now, "the document opens after the first page");
+		assert_eq!(when_to_refresh(true, true, false), Refresh::Soon);
+		assert_eq!(when_to_refresh(true, true, true), Refresh::AlreadyDue, "a second page shares the pending re-read");
+		assert_eq!(when_to_refresh(true, false, false), Refresh::AtEnd, "after Done, once, when the run ends");
+	}
+
+	#[test]
+	fn skipping_blank_sides_keeps_only_the_sides_with_text() {
 		let events = run(Mode::BothSidesSmart, three_sheets());
 		assert_eq!(added(&events), vec![1, 2, 3, 4]);
 		assert_eq!(count(&events, |event| matches!(event, Event::Dropped)), 2);
@@ -786,32 +857,47 @@ mod tests {
 		let events = run(Mode::BothSidesSmart, three_sheets());
 		let turns: Vec<Option<Turn>> = events
 			.iter()
-			.filter_map(|event| if let Event::Read { turn, .. } = event { Some(*turn) } else { None })
+			.filter_map(|event| if let Event::Page { turn, .. } = event { Some(*turn) } else { None })
 			.collect();
 		assert_eq!(turns, vec![None, Some(Turn::Half), None, None]);
-		// Added already turned, so nothing has to be replaced afterwards.
-		assert_eq!(count(&events, |event| matches!(event, Event::Turned { .. })), 0);
+		let Some(Event::Page { png, .. }) = events.iter().filter(|event| matches!(event, Event::Page { .. })).nth(1)
+		else {
+			panic!("no second page")
+		};
+		let stored = image::load_from_memory(png).unwrap();
+		assert_eq!(stored.to_luma8().get_pixel(0, 0).0[0], 0, "the page is stored turned the right way up");
 	}
 
 	#[test]
-	fn keeping_all_sides_keeps_blank_ones_too() {
+	fn two_sided_scanning_keeps_every_side_by_default() {
 		let events = run(Mode::BothSidesAll, three_sheets());
 		assert_eq!(added(&events), vec![1, 2, 3, 4, 5, 6]);
 		assert_eq!(count(&events, |event| matches!(event, Event::Blank | Event::Dropped)), 0);
 	}
 
 	#[test]
-	fn one_sided_feeding_leaves_out_blank_pages_and_says_so() {
+	fn one_sided_feeding_keeps_a_blank_page_by_default_and_says_it_looks_blank() {
 		let events = run(Mode::Feeder, vec![printed(), blank(), printed()]);
-		assert_eq!(added(&events), vec![1, 2]);
-		assert_eq!(count(&events, |event| matches!(event, Event::Blank)), 1);
+		assert_eq!(added(&events), vec![1, 2, 3]);
+		let flagged: Vec<bool> = events
+			.iter()
+			.filter_map(|event| if let Event::Page { looks_blank, .. } = event { Some(*looks_blank) } else { None })
+			.collect();
+		assert_eq!(flagged, vec![false, true, false]);
 	}
 
 	#[test]
-	fn a_page_is_in_the_document_before_its_text_arrives() {
+	fn one_sided_feeding_with_skipping_leaves_out_pages_without_text() {
+		let events = run(Mode::FeederSkip, vec![printed(), blank(), show_through(), printed()]);
+		assert_eq!(added(&events), vec![1, 2]);
+		assert_eq!(count(&events, |event| matches!(event, Event::Dropped)), 2);
+	}
+
+	#[test]
+	fn a_page_arrives_once_with_its_text_and_the_right_way_up() {
 		let events = run(Mode::Feeder, vec![sheet_side(0, true)]);
-		assert!(matches!(events[0], Event::Added { number: 1, .. }));
-		assert!(matches!(events[1], Event::Turned { number: 1, .. }));
-		assert!(matches!(events[2], Event::Read { number: 1, turn: Some(Turn::Half), .. }));
+		assert_eq!(events.len(), 2, "one page event and the end");
+		assert!(matches!(events[0], Event::Page { number: 1, turn: Some(Turn::Half), .. }));
+		assert!(matches!(events[1], Event::Ended(_)));
 	}
 }

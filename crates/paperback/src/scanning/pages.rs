@@ -16,8 +16,9 @@ pub type Reading = (Vec<RecognizedLine>, u32, u32);
 #[derive(Debug, Default)]
 pub struct ReadPage {
 	pub lines: Vec<RecognizedLine>,
-	pub words: usize,
-	/// Words that look like words, which bleed-through from the other side and specks don't make.
+	/// Words, or characters in scripts written without spaces.
+	pub amount: check::TextAmount,
+	/// Text that looks like text, which bleed-through from the other side and specks don't make.
 	pub plausible: usize,
 	pub turn: Option<Turn>,
 	/// The page turned right way up, to replace the scanned one.
@@ -37,11 +38,13 @@ pub fn is_blank(page: &DynamicImage) -> bool {
 pub enum Mode {
 	/// A blank page is asked about: it's probably face down.
 	Flatbed,
-	/// One side of each sheet; blank pages are left out and counted, since a feeder can't take one back.
+	/// One side of each sheet, every page kept; a blank one is said to look blank, since it may be face down.
 	Feeder,
-	/// Both sides of each sheet, keeping only the sides with real text, so a one-sided stack, face up or face down, comes out as its printed pages.
+	/// One side of each sheet, leaving out pages with no text (opt-in, since OCR finds none in a photo or a signature).
+	FeederSkip,
+	/// Both sides of each sheet, keeping only the sides with real text, so a one-sided stack, face up or face down, comes out as its printed pages (opt-in).
 	BothSidesSmart,
-	/// Both sides of each sheet, every one kept.
+	/// Both sides of each sheet, every one kept: the default for two-sided scanning.
 	BothSidesAll,
 }
 
@@ -61,14 +64,14 @@ pub fn read(page: &DynamicImage, recognize: &mut dyn FnMut(&DynamicImage) -> Res
 		Err(error) => return ReadPage { error: Some(error), ..ReadPage::default() },
 	};
 	let mut result = ReadPage::default();
-	let upright = check::plausible_words(&lines);
+	let upright = check::plausible_text(&lines);
 	if check::worth_turning(upright) {
 		let mut tried = vec![(Turn::None, upright)];
 		let mut best: Option<(Turn, DynamicImage, Reading)> = None;
 		for turn in Turn::OTHERS {
 			let turned = turn.apply(page);
 			let Ok(reading) = recognize(&turned) else { continue };
-			let words = check::plausible_words(&reading.0);
+			let words = check::plausible_text(&reading.0);
 			let beats_best = tried.iter().skip(1).all(|(_, other)| words > *other);
 			tried.push((turn, words));
 			if beats_best {
@@ -85,9 +88,9 @@ pub fn read(page: &DynamicImage, recognize: &mut dyn FnMut(&DynamicImage) -> Res
 			result.turned = Some(turned);
 		}
 	}
-	result.words = check::word_count(&lines);
-	result.plausible = check::plausible_words(&lines);
-	result.little_text = check::little_text(result.words);
+	result.amount = check::text_amount(&lines);
+	result.plausible = check::plausible_text(&lines);
+	result.little_text = check::little_text(result.amount);
 	result.cut_off = check::cut_off_edges(&lines, width, height).any();
 	result.lines = lines;
 	result
@@ -165,7 +168,7 @@ mod tests {
 		assert_eq!(calls, 1);
 		assert_eq!(read.turn, None);
 		assert!(read.turned.is_none());
-		assert!(read.words > 30);
+		assert!(read.amount.words > 30);
 		assert!(!read.little_text);
 	}
 
@@ -175,9 +178,28 @@ mod tests {
 		let read = read(&page_turned(Turn::Half), &mut stand_in(&mut calls));
 		assert_eq!(read.turn, Some(Turn::Half));
 		assert_eq!(read.turned.as_ref().map(|page| (page.width(), page.height())), Some((40, 60)));
-		assert!(read.words > 30);
+		assert!(read.amount.words > 30);
 		// Upside down is tried first, and reads clearly, so sideways is never tried.
 		assert_eq!(calls, 2);
+	}
+
+	#[test]
+	fn an_upside_down_page_of_chinese_is_turned_too() {
+		// The engine gives each character as its own word, as Windows OCR and Tesseract do.
+		let mut engine = |image: &DynamicImage| {
+			let text = if image.to_luma8().get_pixel(0, 0).0[0] == 0 {
+				"委员会星期二开会审查了这项提案成员们同意在小的修改之后推进这个计划"
+			} else {
+				"' ~ 1l"
+			};
+			let spaced = text.chars().map(String::from).collect::<Vec<_>>().join(" ");
+			Ok((vec![RecognizedLine { text: spaced, words: vec![] }], image.width(), image.height()))
+		};
+		let read = read(&page_turned(Turn::Half), &mut engine);
+		assert_eq!(read.turn, Some(Turn::Half));
+		assert!(read.amount.in_characters());
+		assert!(read.amount.characters > 30);
+		assert!(!read.little_text);
 	}
 
 	#[test]
@@ -216,7 +238,7 @@ mod tests {
 		let mut engine = |_: &DynamicImage| Err(OcrError::Unavailable);
 		let read = read(&page_turned(Turn::None), &mut engine);
 		assert!(matches!(read.error, Some(OcrError::Unavailable)));
-		assert_eq!(read.words, 0);
+		assert_eq!(read.amount.units(), 0);
 	}
 
 	#[test]

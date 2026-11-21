@@ -16,7 +16,7 @@ const BORDER_PERCENT: u32 = 2;
 /// A page with only a page number or one short line has more ink than this; dust and the scanner's edge shadows have less.
 const BLANK_INK: f32 = 0.0004;
 
-/// Fewer plausible words than this and the page may be turned; a page of text has hundreds.
+/// Less plausible text than this (words, or characters of scripts without spaces) and the page may be turned; a page of text has hundreds.
 const TRY_TURNING_BELOW: usize = 25;
 
 /// A turn reading this many plausible words wins against any page worth turning, so the turns after it needn't be tried.
@@ -94,15 +94,72 @@ pub fn is_blank(ink_share: f32) -> bool {
 	ink_share < BLANK_INK
 }
 
-/// Words with at least two letters, mostly letters: an upside-down page reads as scattered marks and short fragments.
-#[must_use]
-pub fn plausible_words(lines: &[RecognizedLine]) -> usize {
-	lines.iter().flat_map(|line| line.text.split_whitespace()).filter(|word| is_plausible(word)).count()
+/// How much readable text a page holds: words in scripts written with spaces, and characters in scripts written without them (Chinese, Japanese, Thai, Lao, Khmer, Burmese), where OCR engines report every character as its own word.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TextAmount {
+	pub words: usize,
+	pub characters: usize,
+}
+
+impl TextAmount {
+	/// Words and characters together, each counting as one unit of text, which is what the thresholds here are measured in.
+	#[must_use]
+	pub const fn units(self) -> usize {
+		self.words + self.characters
+	}
+
+	/// Mostly characters of scripts without spaces, so "characters" is what to count out loud.
+	#[must_use]
+	pub const fn in_characters(self) -> bool {
+		self.characters > self.words
+	}
 }
 
 #[must_use]
-pub fn word_count(lines: &[RecognizedLine]) -> usize {
-	lines.iter().map(|line| line.text.split_whitespace().count()).sum()
+pub fn text_amount(lines: &[RecognizedLine]) -> TextAmount {
+	let mut amount = TextAmount::default();
+	for token in lines.iter().flat_map(|line| line.text.split_whitespace()) {
+		let unspaced = token.chars().filter(|c| is_unspaced(*c)).count();
+		if unspaced > 0 {
+			amount.characters += unspaced;
+		} else {
+			amount.words += 1;
+		}
+	}
+	amount
+}
+
+/// Text that looks like text: a word with at least two letters, mostly letters, or one character of a script written without spaces. An upside-down page reads as scattered marks and short fragments.
+#[must_use]
+pub fn plausible_text(lines: &[RecognizedLine]) -> usize {
+	lines
+		.iter()
+		.flat_map(|line| line.text.split_whitespace())
+		.map(|token| {
+			let unspaced = token.chars().filter(|c| is_unspaced(*c)).count();
+			if unspaced > 0 { unspaced } else { usize::from(is_plausible(token)) }
+		})
+		.sum()
+}
+
+/// Han (with its compatibility and extension blocks), Hiragana, Katakana, Thai, Lao, Myanmar and Khmer. Korean is written with spaces, so Hangul counts by the word.
+fn is_unspaced(c: char) -> bool {
+	matches!(
+		u32::from(c),
+		0x0E00..=0x0EFF // Thai, Lao
+			| 0x1000..=0x109F // Myanmar
+			| 0x1780..=0x17FF // Khmer
+			| 0x19E0..=0x19FF // Khmer symbols
+			| 0x3040..=0x30FF // Hiragana, Katakana
+			| 0x31F0..=0x31FF // Katakana phonetic extensions
+			| 0x3400..=0x4DBF // CJK extension A
+			| 0x4E00..=0x9FFF // CJK unified ideographs
+			| 0xA9E0..=0xA9FF // Myanmar extended B
+			| 0xAA60..=0xAA7F // Myanmar extended A
+			| 0xF900..=0xFAFF // CJK compatibility ideographs
+			| 0xFF66..=0xFF9F // Halfwidth Katakana
+			| 0x20000..=0x3134F // CJK extensions B to G
+	) && c.is_alphabetic()
 }
 
 #[must_use]
@@ -124,8 +181,8 @@ pub fn best_turn(tried: &[(Turn, usize)]) -> Turn {
 }
 
 #[must_use]
-pub fn little_text(words: usize) -> bool {
-	words < LITTLE_TEXT_WORDS
+pub fn little_text(amount: TextAmount) -> bool {
+	amount.units() < LITTLE_TEXT_WORDS
 }
 
 /// `width` and `height` are of the image the words were read from.
@@ -267,15 +324,41 @@ mod tests {
 			line(&[("The", 0.0, 0.0), ("quick,", 0.0, 0.0), ("brown", 0.0, 0.0)]),
 			line(&[("·", 0.0, 0.0), ("1l", 0.0, 0.0), ("'", 0.0, 0.0), ("z", 0.0, 0.0), ("~^", 0.0, 0.0)]),
 		];
-		assert_eq!(plausible_words(&lines), 3);
-		assert_eq!(word_count(&lines), 8);
+		assert_eq!(plausible_text(&lines), 3);
+		assert_eq!(text_amount(&lines), TextAmount { words: 8, characters: 0 });
 	}
 
 	#[test]
 	fn letters_in_any_script_count() {
 		assert!(is_plausible("Привет"));
-		assert!(is_plausible("ありがとう"));
+		assert!(is_plausible("שלום"));
 		assert!(!is_plausible("12345"));
+	}
+
+	#[test]
+	fn scripts_without_spaces_count_by_the_character() {
+		// OCR engines give each CJK or Thai character as its own word.
+		let japanese =
+			line(&[("今", 0.0, 0.0), ("日", 0.0, 0.0), ("は", 0.0, 0.0), ("晴", 0.0, 0.0), ("れ", 0.0, 0.0)]);
+		assert_eq!(plausible_text(std::slice::from_ref(&japanese)), 5);
+		let amount = text_amount(std::slice::from_ref(&japanese));
+		assert_eq!(amount, TextAmount { words: 0, characters: 5 });
+		assert!(amount.in_characters());
+		let run_together = RecognizedLine { text: "ภาษาไทย 中文".to_string(), words: vec![] };
+		assert_eq!(text_amount(std::slice::from_ref(&run_together)).characters, 9);
+		let korean = RecognizedLine { text: "안녕하세요 세계".to_string(), words: vec![] };
+		assert_eq!(text_amount(std::slice::from_ref(&korean)), TextAmount { words: 2, characters: 0 });
+		assert!(!is_unspaced('。'), "punctuation is not text");
+	}
+
+	#[test]
+	fn a_page_of_chinese_reads_clearly_and_is_not_little_text() {
+		let text = "我们今天讨论了这个计划并同意在小的修改之后继续推进预算部分也已经准备好了大家都感谢工作人员";
+		let lines =
+			[RecognizedLine { text: text.chars().map(String::from).collect::<Vec<_>>().join(" "), words: vec![] }];
+		assert!(reads_clearly(plausible_text(&lines)));
+		assert!(!worth_turning(plausible_text(&lines)));
+		assert!(!little_text(text_amount(&lines)));
 	}
 
 	#[test]

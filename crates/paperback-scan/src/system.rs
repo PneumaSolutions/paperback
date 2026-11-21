@@ -29,16 +29,15 @@ impl Scanner for SystemScanner {
 		self.cancelled.store(false, Ordering::Release);
 		let options = options(scanner, *settings);
 		let mut pages = 0;
+		// Streamed: each page is handed over by value and pagescan keeps none of them.
 		let outcome = pagescan::scan_with_pages(
 			&options,
 			|_| {},
 			|_, page| {
 				pages += 1;
-				on_page(page.clone());
+				on_page(page);
 			},
 		);
-		// The pages were handed over one by one already; the outcome's copies only cost memory from here.
-		drop(outcome.pages);
 		let error = outcome.error.map(|error| convert(&error, self.cancelled.load(Ordering::Acquire)));
 		ScanSummary { pages, error }
 	}

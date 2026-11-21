@@ -63,15 +63,17 @@ pub fn show_scan_settings_dialog(
 		// TRANSLATORS: A scanning resolution; %d is the number of dots per inch
 		resolution_choice.append(&t("%d DPI").replacen("%d", &dpi.to_string(), 1));
 	}
-	// TRANSLATORS: Checkbox in the Scan Document dialog, for the document feeder scanning both sides: leave out the sides with no text on them
-	let skip_blank_sides = CheckBox::builder(&dialog).with_label(&t("S&kip blank sides")).build();
+	// TRANSLATORS: Checkbox in the Scan Document dialog, for the document feeder: leave out pages (or sides of a page) with no text on them
+	let skip_blank_sides = CheckBox::builder(&dialog).with_label(&t("S&kip blank pages")).build();
 	let sources_shown: Rc<RefCell<Vec<Source>>> = Rc::new(RefCell::new(Vec::new()));
-	let both_sides_chosen = {
+	let feeder_chosen = {
 		let sources_shown = Rc::clone(&sources_shown);
 		move || {
 			let sources = sources_shown.borrow();
-			source_choice.get_selection().and_then(|index| sources.get(usize::try_from(index).ok()?).copied())
-				== Some(Source::FeederDuplex)
+			source_choice
+				.get_selection()
+				.and_then(|index| sources.get(usize::try_from(index).ok()?).copied())
+				.is_some_and(Source::is_feeder)
 		}
 	};
 	let show_settings = {
@@ -90,14 +92,14 @@ pub fn show_scan_settings_dialog(
 			source_choice.set_selection(u32::try_from(selected).unwrap_or(0));
 			*sources_shown.borrow_mut() = sources;
 			skip_blank_sides.set_value(remembered.skip_blank_sides(scanner));
-			skip_blank_sides.enable(settings.source == Source::FeederDuplex);
+			skip_blank_sides.enable(settings.source.is_feeder());
 			color_choice.set_selection(u32::from(settings.color == ColorMode::Color));
 			let dpi = RESOLUTIONS.iter().position(|dpi| *dpi == settings.dpi).unwrap_or(2);
 			resolution_choice.set_selection(u32::try_from(dpi).unwrap_or(2));
 		}
 	};
 	show_settings(first);
-	source_choice.on_selection_changed(move |_| skip_blank_sides.enable(both_sides_chosen()));
+	source_choice.on_selection_changed(move |_| skip_blank_sides.enable(feeder_chosen()));
 	scanner_choice.on_selection_changed(move |event| {
 		if let Some(index) = event.get_selection().and_then(|index| usize::try_from(index).ok()) {
 			show_settings(index);
@@ -147,7 +149,7 @@ pub fn show_scan_settings_dialog(
 			SettingsChoice::Scan {
 				scanner,
 				settings: ScanSettings { source, dpi, color },
-				skip_blank_sides: source == Source::FeederDuplex && skip_blank_sides.is_checked(),
+				skip_blank_sides: source.is_feeder() && skip_blank_sides.is_checked(),
 			}
 		}
 		ID_FIND_SCANNERS => SettingsChoice::FindScanners,

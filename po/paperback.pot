@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: paperback 1.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-21 13:17-0500\n"
+"POT-Creation-Date: 2026-11-21 14:02-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -199,6 +199,12 @@ msgstr ""
 msgid "Page %d: no text found."
 msgstr ""
 
+#. TRANSLATORS: Announced after a scanned page in a language written without spaces (such as Chinese, Japanese or Thai) is read; the first %d is the page number, the second the number of characters found
+msgid "Page %d: %d character."
+msgid_plural "Page %d: %d characters."
+msgstr[0] ""
+msgstr[1] ""
+
 #. TRANSLATORS: Announced after a scanned page is read; the first %d is the page number, the second the number of words found
 msgid "Page %d: %d word."
 msgid_plural "Page %d: %d words."
@@ -228,8 +234,8 @@ msgstr ""
 msgid "Page %d looks blank. If it is face down, turn it over and choose Rescan. Otherwise choose Skip to leave it out."
 msgstr ""
 
-#. TRANSLATORS: Said during a document feeder scan when a page has nothing on it and is not added
-msgid "Blank page left out."
+#. TRANSLATORS: Said after a page from the document feeder that has nothing on it; it is kept, and might be face down
+msgid "It looks blank; it might be face down."
 msgstr ""
 
 #. TRANSLATORS: Said when every page from the document feeder came out blank
@@ -1730,8 +1736,8 @@ msgstr ""
 msgid "%d DPI"
 msgstr ""
 
-#. TRANSLATORS: Checkbox in the Scan Document dialog, for the document feeder scanning both sides: leave out the sides with no text on them
-msgid "S&kip blank sides"
+#. TRANSLATORS: Checkbox in the Scan Document dialog, for the document feeder: leave out pages (or sides of a page) with no text on them
+msgid "S&kip blank pages"
 msgstr ""
 
 #. TRANSLATORS: Button in the Scan Document dialog that lists every scanner again, to pick another one

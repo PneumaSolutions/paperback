@@ -44,7 +44,7 @@ pub fn discard(path: &Path, config: &ConfigManager) {
 pub fn save_copy(source: &Path, destination: &Path) -> anyhow::Result<()> {
 	let title = destination.file_stem().map(|stem| stem.to_string_lossy().into_owned()).unwrap_or_default();
 	let lines = load_pages(&saved_pages_file(&saved_pages_dir(), source));
-	ScanArchive::open(source).copy_to(destination, &title)?;
+	ScanArchive::open(source)?.copy_to(destination, &title)?;
 	let text = saved_pages_file(&saved_pages_dir(), destination);
 	let _ = fs::remove_file(&text);
 	save_pages(&text, &lines)?;

@@ -1,6 +1,6 @@
 //! Everything the scan run says, in one place so the wording reads as one voice and the tests can hold it. Spoken in the order a sighted person would notice: the page and its words, then anything odd about it.
 
-use paperback_core::scan::check::Turn;
+use paperback_core::scan::check::{TextAmount, Turn};
 use paperback_scan::{ErrorKind, ScanError, Source};
 use patois::{nt, t};
 
@@ -22,14 +22,18 @@ pub fn source_name(source: Source) -> String {
 
 /// After a page is read: its number and how many words, then whether it was turned. A turned page is put right without asking, since it reads; only a page that may be out of line is worth scanning again ([`not_lined_up`]).
 #[must_use]
-pub fn page_read(number: usize, words: usize, turn: Option<Turn>) -> String {
-	let mut message = if words == 0 {
+pub fn page_read(number: usize, amount: TextAmount, turn: Option<Turn>) -> String {
+	let mut message = if amount.units() == 0 {
 		// TRANSLATORS: Announced after a scanned page is read and no text is found on it; %d is the page number
 		t("Page %d: no text found.").replacen("%d", &number.to_string(), 1)
+	} else if amount.in_characters() {
+		// TRANSLATORS: Announced after a scanned page in a language written without spaces (such as Chinese, Japanese or Thai) is read; the first %d is the page number, the second the number of characters found
+		let template = nt("Page %d: %d character.", "Page %d: %d characters.", count(amount.units()));
+		template.replacen("%d", &number.to_string(), 1).replacen("%d", &amount.units().to_string(), 1)
 	} else {
 		// TRANSLATORS: Announced after a scanned page is read; the first %d is the page number, the second the number of words found
-		let template = nt("Page %d: %d word.", "Page %d: %d words.", count(words));
-		template.replacen("%d", &number.to_string(), 1).replacen("%d", &words.to_string(), 1)
+		let template = nt("Page %d: %d word.", "Page %d: %d words.", count(amount.units()));
+		template.replacen("%d", &number.to_string(), 1).replacen("%d", &amount.units().to_string(), 1)
 	};
 	let turned = match turn {
 		// TRANSLATORS: Said after a scanned page that was upside down and has been turned the right way up; %d is the page number
@@ -72,10 +76,11 @@ pub fn blank_on_flatbed(number: usize) -> String {
 		.replacen("%d", &number.to_string(), 1)
 }
 
+/// A one-sided feeder keeps blank pages unless asked to skip them; this is said with the page.
 #[must_use]
-pub fn blank_left_out() -> String {
-	// TRANSLATORS: Said during a document feeder scan when a page has nothing on it and is not added
-	t("Blank page left out.")
+pub fn looks_blank() -> String {
+	// TRANSLATORS: Said after a page from the document feeder that has nothing on it; it is kept, and might be face down
+	t("It looks blank; it might be face down.")
 }
 
 #[must_use]
@@ -188,17 +193,27 @@ pub fn finished(pages: usize) -> String {
 mod tests {
 	use super::*;
 
+	fn words(words: usize) -> TextAmount {
+		TextAmount { words, characters: 0 }
+	}
+
+	#[test]
+	fn a_page_in_a_script_without_spaces_counts_characters() {
+		let amount = TextAmount { words: 2, characters: 512 };
+		assert_eq!(page_read(1, amount, None), "Page 1: 514 characters.");
+	}
+
 	#[test]
 	fn a_page_says_its_number_and_words() {
-		assert_eq!(page_read(3, 245, None), "Page 3: 245 words.");
-		assert_eq!(page_read(1, 1, None), "Page 1: 1 word.");
-		assert_eq!(page_read(2, 0, None), "Page 2: no text found.");
+		assert_eq!(page_read(3, words(245), None), "Page 3: 245 words.");
+		assert_eq!(page_read(1, words(1), None), "Page 1: 1 word.");
+		assert_eq!(page_read(2, words(0), None), "Page 2: no text found.");
 	}
 
 	#[test]
 	fn a_turned_page_is_corrected_and_says_so_briefly() {
-		assert_eq!(page_read(3, 300, Some(Turn::Half)), "Page 3: 300 words. Page 3 was upside down; corrected.");
-		assert!(page_read(4, 300, Some(Turn::Quarter)).ends_with("Page 4 was sideways; corrected."));
+		assert_eq!(page_read(3, words(300), Some(Turn::Half)), "Page 3: 300 words. Page 3 was upside down; corrected.");
+		assert!(page_read(4, words(300), Some(Turn::Quarter)).ends_with("Page 4 was sideways; corrected."));
 	}
 
 	#[test]

@@ -91,28 +91,30 @@ In the Scan Document dialog you choose:
 * Source: Flatbed (the glass), Document feeder, one side, or Document feeder, both sides. Only the sources your scanner has are listed.
 * Color: Grayscale, the default, or Color. OCR reads grayscale as well as color, and grayscale pages are a third of the size.
 * Resolution: 300 DPI by default, which is what OCR works best at. Not every scanner offers every resolution; if yours doesn't, Paperback says so.
-* Skip blank sides, for the document feeder scanning both sides. It's off unless you turn it on. See below.
+* Skip blank pages, for the document feeder. It's off unless you turn it on. See below.
 
 Paperback remembers these settings for each scanner separately.
 
 ### Scanning from the flatbed
 
-Put a page face down on the glass and choose Scan. Paperback scans it, opens the document, reads the page with OCR and tells you the page number and how many words it found, for example "Page 1: 245 words." Then put the next page on the glass and press Enter to scan it, or press Escape to finish. When you finish, you're taken to the document, at the first page.
+Put a page face down on the glass and choose Scan. Paperback scans it, reads it with OCR, opens the document and tells you the page number and how many words it found, for example "Page 1: 245 words." For languages written without spaces between words, such as Chinese, Japanese or Thai, it counts characters instead. Then put the next page on the glass and press Enter to scan it, or press Escape to finish. When you finish, you're taken to the document, at the first page.
 
 ### Scanning from the document feeder
 
-Load the pages and choose Scan. Paperback scans them all and announces each page as its text is read. When the feeder is empty it tells you how many pages it scanned. To scan more pages into the same document, load them and press Enter; press Escape to finish.
+Load the pages and choose Scan. Paperback scans them all and announces each page as its text is read. Every page is kept; one with nothing on it is announced as looking blank, since it might be face down. When the feeder is empty it tells you how many pages it scanned. To scan more pages into the same document, load them and press Enter; press Escape to finish.
 
-Document feeder, both sides, scans the front and back of every sheet and keeps both. If you check Skip blank sides, Paperback keeps only the sides with real text on them, so a stack printed on one side comes out as just its printed pages, whichever way up you loaded it. It decides by the words OCR finds on a side, not by how dark it looks, so show-through from the other side of thin paper doesn't count as text. That also means a side with only a photo, a signature or handwriting can be skipped, which is why the option is off by default. With it on, only the pages kept are announced, and at the end Paperback sums up, for example "5 sheets, 7 pages, 3 blank sides skipped."
+Document feeder, both sides, scans the front and back of every sheet and keeps both.
 
-The document opens after the first page, and each page's text appears as soon as it has been read, so you can start reading while later pages are still being scanned or read.
+If you check Skip blank pages, Paperback keeps only the pages, or sides, with real text on them, so a stack printed on one side comes out as just its printed pages, and with both sides, whichever way up you loaded it. It decides by the words OCR finds, not by how dark the page looks, so show-through from the other side of thin paper doesn't count as text. That also means a page with only a photo, a signature or handwriting can be skipped, which is why the option is off by default. With it on, only the pages kept are announced, and at the end Paperback sums up, for example "5 sheets, 7 pages, 3 blank sides skipped."
+
+The document opens after the first page has been read, and later pages appear in it as they're read, so you can look at what's there while the rest are scanned. While the Scanning window is open the document catches up every second or so; after you close it, the pages still being read are added once they're all done, so the text under your cursor doesn't change while you read.
 
 ### When a page needs attention
 
 Paperback tells you, in plain words, when something about a page looks wrong:
 
 * A page upside down or sideways is turned the right way up automatically, and Paperback says so briefly, for example "Page 3 was upside down; corrected." You don't need to do anything.
-* A blank page is usually one placed face down. On the flatbed, Paperback stops and asks: turn the page over and choose Rescan, or choose Skip to leave it out. From the one-sided document feeder, blank pages are left out, and at the end Paperback tells you how many, since they might have been face down.
+* A blank page is usually one placed face down. On the flatbed, Paperback stops and asks: turn the page over and choose Rescan, or choose Skip to leave it out. From the document feeder, a blank page is kept and announced as looking blank, unless Skip blank pages is on, in which case it's left out and counted.
 * Very little text, or text that touches the edge of the scan, can mean the page isn't lined up. Paperback says so but doesn't stop: on the flatbed, a Rescan button appears beside Scan Next Page. Straighten the page and choose Rescan to scan it again in its place, or just press Enter to go on to the next page. From the document feeder it tells you which page it was.
 
 ### Saving what you scanned
