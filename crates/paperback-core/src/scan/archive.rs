@@ -300,6 +300,8 @@ pub fn repair(path: &Path) -> Result<Repair> {
 	if pages == 0 {
 		return Ok(Repair::NothingToRecover);
 	}
+	// Windows won't rename over a file that's still open.
+	drop(entries);
 	finish(writer, path)?;
 	tracing::info!(path = %path.display(), pages, "recovered a scan whose last page was cut short");
 	Ok(Repair::Recovered(pages))
@@ -657,10 +659,7 @@ mod tests {
 		// The next page takes the number the failed one would have had, with its own text.
 		assert_eq!(archive.append(&encode_png(&page(3)).unwrap(), &text(3, "three")).unwrap(), 3);
 		assert_eq!(widths(&archive), vec![1, 2, 3]);
-		assert_eq!(
-			texts(&archive),
-			vec![(1, "one".to_string()), (2, "two".to_string()), (3, "three".to_string())]
-		);
+		assert_eq!(texts(&archive), vec![(1, "one".to_string()), (2, "two".to_string()), (3, "three".to_string())]);
 	}
 
 	#[test]
@@ -678,8 +677,8 @@ mod tests {
 		let dir = tempfile::tempdir().unwrap();
 		let mut archive = ScanArchive::create(dir.path(), "Scan").unwrap();
 		archive.append(&encode_png(&page(1)).unwrap(), &text(7, "first")).unwrap();
-		let mut zip = ZipWriter::new_append(OpenOptions::new().read(true).write(true).open(archive.path()).unwrap())
-			.unwrap();
+		let mut zip =
+			ZipWriter::new_append(OpenOptions::new().read(true).write(true).open(archive.path()).unwrap()).unwrap();
 		zip.start_file("page-0009.ocr", page_options()).unwrap();
 		zip.write_all(text(9, "stranger").as_bytes()).unwrap();
 		zip.finish().unwrap();
