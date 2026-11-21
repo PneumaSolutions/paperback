@@ -14,7 +14,9 @@ use paperback_core::{
 
 /// Matches the app's own gate, so pb and the app agree about which documents Batch OCR applies to.
 pub fn is_ocr_able(file_path: &str) -> bool {
-	["pdf", "cbz", "cbr"].iter().any(|extension| file_path.to_ascii_lowercase().ends_with(&format!(".{extension}")))
+	["pdf", "cbz", "cbr", "pbscan"]
+		.iter()
+		.any(|extension| file_path.to_ascii_lowercase().ends_with(&format!(".{extension}")))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

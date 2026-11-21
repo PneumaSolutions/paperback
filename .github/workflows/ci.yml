@@ -343,7 +343,14 @@ jobs:
             libgtk-3-dev libpng-dev libjpeg-dev libgl1-mesa-dev libglu1-mesa-dev \
             libxkbcommon-dev libwayland-dev libexpat1-dev libtiff-dev \
             libwebkit2gtk-4.1-dev libxtst-dev libsm-dev libice-dev \
-            libasound2-dev
+            libasound2-dev libsane1 sane-utils
+      # SANE's virtual "test" scanner (a flatbed and a 10-sheet feeder), alone, for the scanning tests; real backends are never probed.
+      - name: Set up SANE's test scanner
+        run: |
+          mkdir -p "$RUNNER_TEMP/sane"
+          echo test > "$RUNNER_TEMP/sane/dll.conf"
+          echo "SANE_CONFIG_DIR=$RUNNER_TEMP/sane" >> "$GITHUB_ENV"
+          echo "PAPERBACK_SANE_TEST=1" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable

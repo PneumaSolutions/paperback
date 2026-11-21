@@ -94,6 +94,9 @@ actions! {
 	Open, File, t("Open..."), ctrl("O");
 	// TRANSLATORS: Name of this keyboard-shortcut action, shown in the Customize Keyboard Shortcuts dialog (its list of assignable actions, and the "Set Shortcut for {}" / conflict-reassignment prompts).
 	OpenFromUrl, File, t("Open from URL..."), ctrl("L"), mac: ctrl_alt("O");
+	// No default chord until one is agreed; it can be set in Customize Keyboard Shortcuts.
+	// TRANSLATORS: Name of this keyboard-shortcut action, shown in the Customize Keyboard Shortcuts dialog (its list of assignable actions, and the "Set Shortcut for {}" / conflict-reassignment prompts).
+	ScanDocument, File, t("Scan Document..."), None;
 	// TRANSLATORS: Name of this keyboard-shortcut action, shown in the Customize Keyboard Shortcuts dialog (its list of assignable actions, and the "Set Shortcut for {}" / conflict-reassignment prompts).
 	Close, File, t("Close"), ctrl("F4"), mac: ctrl("W");
 	// TRANSLATORS: Name of this keyboard-shortcut action, shown in the Customize Keyboard Shortcuts dialog (its list of assignable actions, and the "Set Shortcut for {}" / conflict-reassignment prompts).

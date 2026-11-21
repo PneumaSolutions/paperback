@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: paperback 1.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-24 01:53+0000\n"
+"POT-Creation-Date: 2026-11-21 14:12-0700\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -182,6 +182,132 @@ msgstr ""
 #. TRANSLATORS: Announced on Linux when Tesseract is installed but has no language data for OCR
 msgid "No OCR language is installed. Install a Tesseract language package from your package manager."
 msgstr ""
+
+#. TRANSLATORS: A scanner source in the Scan Document dialog: the glass a page is laid on
+msgid "Flatbed"
+msgstr ""
+
+#. TRANSLATORS: A scanner source in the Scan Document dialog: the tray that pulls pages through one at a time, scanning one side of each
+msgid "Document feeder, one side"
+msgstr ""
+
+#. TRANSLATORS: A scanner source in the Scan Document dialog: the document feeder, scanning the front and back of each sheet and keeping the sides with text
+msgid "Document feeder, both sides"
+msgstr ""
+
+#. TRANSLATORS: Announced after a scanned page is read and no text is found on it; %d is the page number
+msgid "Page %d: no text found."
+msgstr ""
+
+#. TRANSLATORS: Announced after a scanned page is read; the first %d is the page number, the second the number of words found
+msgid "Page %d: %d word."
+msgid_plural "Page %d: %d words."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: Said after a scanned page that was upside down and has been turned the right way up; %d is the page number
+msgid "Page %d was upside down; corrected."
+msgstr ""
+
+#. TRANSLATORS: Said after a scanned page that was sideways and has been turned the right way up; %d is the page number
+msgid "Page %d was sideways; corrected."
+msgstr ""
+
+#. TRANSLATORS: Said after a scanned page whose text runs up against an edge of the scan
+msgid "Some text touches the edge, so the page might not be lined up."
+msgstr ""
+
+#. TRANSLATORS: Said after a scanned page on which only a few words were found
+msgid "Only a little text was found, so the page might not be lined up."
+msgstr ""
+
+#. TRANSLATORS: Said after a flatbed page that might not be lined up; Rescan and Skip are buttons
+msgid "Straighten it and choose Rescan, or choose Skip to keep it as it is."
+msgstr ""
+
+#. TRANSLATORS: Said when a page scanned from the flatbed has nothing on it; %d is the page number it would have been
+msgid "Page %d looks blank. If it is face down, turn it over and choose Rescan. Otherwise choose Skip to leave it out."
+msgstr ""
+
+#. TRANSLATORS: Said during a document feeder scan when a page has nothing on it and is not added
+msgid "Blank page left out."
+msgstr ""
+
+#. TRANSLATORS: Said when every page from the document feeder came out blank
+msgid "Every page was blank. The pages might be face down. Turn the stack over and scan again."
+msgstr ""
+
+#. TRANSLATORS: Said after a flatbed page is scanned, saying how to go on; Enter and Escape are keys
+msgid "Put the next page on the glass and press Enter to scan it, or press Escape to finish."
+msgstr ""
+
+#. TRANSLATORS: Said when a document feeder scan ends; %d is the number of pages added
+msgid "Scanned %d page."
+msgid_plural "Scanned %d pages."
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%d blank page left out. It might have been face down; turn it over and choose Scan More to scan it again."
+msgid_plural "%d blank pages left out. They might have been face down; turn them over and choose Scan More to scan them again."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: Part of the summary after a two-sided feeder scan; %d is the number of sheets of paper that went through
+msgid "%d sheet"
+msgid_plural "%d sheets"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: Part of the summary after a two-sided feeder scan; %d is the number of pages kept in the document
+msgid "%d page"
+msgid_plural "%d pages"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%d blank side skipped"
+msgid_plural "%d blank sides skipped"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: The summary after a two-sided feeder scan, built from the three parts above, in this order: sheets, pages, blank sides skipped
+msgid "{}, {}, {}."
+msgstr ""
+
+#. TRANSLATORS: Said after a document feeder scan, saying how to go on; Enter and Escape are keys
+msgid "To scan more, load them and press Enter. Press Escape to finish."
+msgstr ""
+
+#. TRANSLATORS: Said when a scan starts
+msgid "Scanning."
+msgstr ""
+
+#. TRANSLATORS: Shown while Paperback asks the system which scanners there are
+msgid "Looking for scanners..."
+msgstr ""
+
+msgid "No scanners were found. Check that the scanner is turned on and connected, and that the system's own scanning app can see it, then try again."
+msgstr ""
+
+#. TRANSLATORS: Said when the reader stops a scan
+msgid "Scan stopped."
+msgstr ""
+
+#. TRANSLATORS: Said when Scan Document is chosen while a scan is already running
+msgid "A scan is already running."
+msgstr ""
+
+#. TRANSLATORS: Said when a scan fails; %s is the scanner's own description of the problem, in English
+msgid "The scan stopped: %s"
+msgstr ""
+
+msgid "Scanning needs SANE. Install the sane-utils package, and sane-airscan for network scanners, from your package manager."
+msgstr ""
+
+#. TRANSLATORS: Said when the Scanning window closes; %d is the number of pages in the scanned document
+msgid "Scanned document, %d page."
+msgid_plural "Scanned document, %d pages."
+msgstr[0] ""
+msgstr[1] ""
 
 #. TRANSLATORS: Announced when skipping forward while read aloud is on the last paragraph
 msgid "No next paragraph."
@@ -375,6 +501,14 @@ msgstr ""
 msgid "Open documents from web links"
 msgstr ""
 
+#. TRANSLATORS: Menu item in the File menu to scan pages from a scanner into a new document
+msgid "&Scan Document..."
+msgstr ""
+
+#. TRANSLATORS: Status-bar help text for the File > Scan Document menu item.
+msgid "Scan pages from a scanner and read them"
+msgstr ""
+
 #. TRANSLATORS: Menu item in the File menu to close the current document.
 msgid "&Close"
 msgstr ""
@@ -416,6 +550,7 @@ msgid "Remove all documents from the Recent Documents list"
 msgstr ""
 
 #. TRANSLATORS: Menu item in the File menu to exit the application, shown only on Windows and Linux since macOS provides its own Quit menu item.
+#. TRANSLATORS: System tray menu item to quit the application
 msgid "E&xit"
 msgstr ""
 
@@ -1534,6 +1669,14 @@ msgstr ""
 msgid "&Rules:"
 msgstr ""
 
+#. TRANSLATORS: Said of a speech dictionary rule that is on
+msgid "on"
+msgstr ""
+
+#. TRANSLATORS: Said of a speech dictionary rule that is off
+msgid "off"
+msgstr ""
+
 #. TRANSLATORS: Button in the speech dictionary dialog that adds a rule
 msgid "&Add..."
 msgstr ""
@@ -1651,6 +1794,83 @@ msgstr ""
 
 #. TRANSLATORS: Tab label for the Settings panel with options most people never need, such as the update channel and log level
 msgid "Advanced"
+msgstr ""
+
+#. TRANSLATORS: Title of the dialog that sets up a scan
+#. TRANSLATORS: Title of error and information messages from scanning
+msgid "Scan Document"
+msgstr ""
+
+#. TRANSLATORS: Label for the list of scanners in the Scan Document dialog
+msgid "Sc&anner:"
+msgstr ""
+
+#. TRANSLATORS: A scanner in the Scan Document dialog whose details could not be read; %s is its name
+msgid "%s (not responding)"
+msgstr ""
+
+#. TRANSLATORS: Label for the choice of where the scanner takes the paper from
+msgid "So&urce:"
+msgstr ""
+
+#. TRANSLATORS: Label for the choice between scanning in grayscale or in color
+msgid "C&olor:"
+msgstr ""
+
+#. TRANSLATORS: A choice in the Scan Document dialog: scan in shades of gray, which OCR reads as well as color
+msgid "Grayscale"
+msgstr ""
+
+#. TRANSLATORS: A choice in the Scan Document dialog: scan in color
+msgid "Color"
+msgstr ""
+
+#. TRANSLATORS: Label for the choice of scanning resolution, in dots per inch
+msgid "&Resolution:"
+msgstr ""
+
+#. TRANSLATORS: A scanning resolution; %d is the number of dots per inch
+msgid "%d DPI"
+msgstr ""
+
+#. TRANSLATORS: Checkbox in the Scan Document dialog, for the document feeder scanning both sides: keep blank sides too, instead of only the sides with text
+msgid "&Keep blank sides"
+msgstr ""
+
+#. TRANSLATORS: Button in the Scan Document dialog that lists every scanner again, to pick another one
+msgid "&Find Other Scanners..."
+msgstr ""
+
+#. TRANSLATORS: Button in the Scan Document dialog that starts scanning
+msgid "&Scan"
+msgstr ""
+
+#. TRANSLATORS: Title of the window that stays open while pages are scanned
+msgid "Scanning"
+msgstr ""
+
+#. TRANSLATORS: Button in the Scanning window that runs the document feeder again for more pages
+msgid "Scan &More"
+msgstr ""
+
+#. TRANSLATORS: Button in the Scanning window that scans the next page on the flatbed
+msgid "Scan &Next Page"
+msgstr ""
+
+#. TRANSLATORS: Button in the Scanning window that scans the last page again
+msgid "&Rescan"
+msgstr ""
+
+#. TRANSLATORS: Button in the Scanning window that goes on without scanning the last page again
+msgid "S&kip"
+msgstr ""
+
+#. TRANSLATORS: Button in the Scanning window that stops the scan in progress
+msgid "S&top"
+msgstr ""
+
+#. TRANSLATORS: Button in the Scanning window that closes it and goes to the scanned document
+msgid "&Done"
 msgstr ""
 
 msgid "System-Wide"
@@ -2740,6 +2960,10 @@ msgstr ""
 msgid "Go to percent"
 msgstr ""
 
+#. TRANSLATORS: The name a new scanned document is saved under, before a number when there are several
+msgid "Scan"
+msgstr ""
+
 #. TRANSLATORS: Announced after text is copied, with Ctrl+C or from the marked beginning of a selection. The %d placeholder is replaced with the number of characters copied. Plural form is chosen by that count.
 msgid "%d character copied."
 msgid_plural "%d characters copied."
@@ -2795,12 +3019,20 @@ msgstr ""
 msgid "Restore Paperback"
 msgstr ""
 
+#. TRANSLATORS: Status bar help text for the tray menu's "Exit" item
+msgid "Exit Paperback"
+msgstr ""
+
 #. TRANSLATORS: Name of this keyboard-shortcut action, shown in the Customize Keyboard Shortcuts dialog (its list of assignable actions, and the "Set Shortcut for {}" / conflict-reassignment prompts).
 msgid "Open..."
 msgstr ""
 
 #. TRANSLATORS: Name of this keyboard-shortcut action, shown in the Customize Keyboard Shortcuts dialog (its list of assignable actions, and the "Set Shortcut for {}" / conflict-reassignment prompts).
 msgid "Open from URL..."
+msgstr ""
+
+#. TRANSLATORS: Name of this keyboard-shortcut action, shown in the Customize Keyboard Shortcuts dialog (its list of assignable actions, and the "Set Shortcut for {}" / conflict-reassignment prompts).
+msgid "Scan Document..."
 msgstr ""
 
 #. TRANSLATORS: Name of this keyboard-shortcut action, shown in the Customize Keyboard Shortcuts dialog (its list of assignable actions, and the "Set Shortcut for {}" / conflict-reassignment prompts).
@@ -3527,6 +3759,14 @@ msgstr ""
 msgid "Failed to parse RTF document: {}"
 msgstr ""
 
+#. TRANSLATORS: Error shown when a scanned document (.pbscan) cannot be opened; {} is the underlying error
+msgid "Failed to open scanned document: {}"
+msgstr ""
+
+#. TRANSLATORS: Error shown when a scanned document holds no page images
+msgid "This scanned document contains no pages."
+msgstr ""
+
 #. TRANSLATORS: Fallback label for an audiobook chapter whose embedded title is empty; {} is the chapter number
 msgid "Chapter {}"
 msgstr ""
@@ -3942,15 +4182,6 @@ msgstr ""
 
 #. TRANSLATORS: A shortcut in the Customize Keyboard Shortcuts list whose key is not on the keyboard layout in use, so it cannot be pressed. The {} placeholder is replaced with the shortcut, for example "Ctrl+;".
 msgid "{} (not on this keyboard layout)"
-msgstr ""
-
-msgid "&Show/Hide"
-msgstr ""
-
-msgid "Show or hide the window"
-msgstr ""
-
-msgid "Close the app"
 msgstr ""
 
 #: kt

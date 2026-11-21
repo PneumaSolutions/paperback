@@ -96,6 +96,15 @@ pub static COMMANDS: &[Command] = &[
 		behavior: Behavior::Run(file::open_from_url),
 	},
 	Command {
+		action: ActionId::ScanDocument,
+		// TRANSLATORS: Menu item in the File menu to scan pages from a scanner into a new document
+		label: || t("&Scan Document..."),
+		// TRANSLATORS: Status-bar help text for the File > Scan Document menu item.
+		help: Some(|| t("Scan pages from a scanner and read them")),
+		enable: Enable::Always,
+		behavior: Behavior::Run(file::scan_document),
+	},
+	Command {
 		action: ActionId::Close,
 		// TRANSLATORS: Menu item in the File menu to close the current document.
 		label: || t("&Close"),

@@ -79,6 +79,10 @@ pub fn open_from_url(ctx: &Ctx) {
 	}
 }
 
+pub fn scan_document(ctx: &Ctx) {
+	crate::ui::scan_session::scan_document(*ctx.frame, ctx.dm, ctx.config, ctx.live_region_label);
+}
+
 pub fn close(ctx: &Ctx) {
 	let mut dm = ctx.dm.lock().unwrap();
 	close_active_document_announced(&mut dm, ctx.live_region_label);

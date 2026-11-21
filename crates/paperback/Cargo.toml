@@ -23,10 +23,12 @@ mailbag-wx = "0.1.0"
 native-ocr = { workspace = true }
 paperback-core = { workspace = true, features = ["fetch"] }
 paperback-formats = { workspace = true }
+paperback-scan = { workspace = true }
 patois = { workspace = true, features = ["wx"] }
 rodio = { version = "0.22.2", default-features = false, features = ["playback", "tracing", "flac", "mp3", "mp4", "vorbis", "wav", "symphonia-adpcm", "symphonia-aiff", "symphonia-alac", "symphonia-mp2"] }
 rodio-wsola = "0.2.0"
 rubato = "5.1.0"
+serde_json = { workspace = true }
 ship-shape = "0.6.1"
 tempfile = { workspace = true }
 toml = { workspace = true }

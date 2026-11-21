@@ -1,0 +1,148 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use pagescan::{ScanOptions, SourceChoice, SourceKind};
+
+use crate::{
+	ColorMode, DynamicImage, ErrorKind, ScanError, ScanSettings, ScanSummary, Scanner, ScannerInfo, Source, TIMEOUT,
+};
+
+/// The platform's own scanners, through pagescan.
+#[derive(Default)]
+pub struct SystemScanner {
+	cancelled: AtomicBool,
+}
+
+impl SystemScanner {
+	#[must_use]
+	pub fn new() -> Self {
+		Self::default()
+	}
+}
+
+impl Scanner for SystemScanner {
+	fn list(&self) -> Result<Vec<ScannerInfo>, ScanError> {
+		let devices = pagescan::list_scanners().map_err(|error| convert(&error, false))?;
+		Ok(devices.into_iter().map(info).collect())
+	}
+
+	fn scan(&self, scanner: &str, settings: &ScanSettings, on_page: &mut dyn FnMut(DynamicImage)) -> ScanSummary {
+		self.cancelled.store(false, Ordering::Release);
+		let options = options(scanner, *settings);
+		let mut pages = 0;
+		let outcome = pagescan::scan_with_pages(
+			&options,
+			|_| {},
+			|_, page| {
+				pages += 1;
+				on_page(page.clone());
+			},
+		);
+		// The pages were handed over one by one already; the outcome's copies only cost memory from here.
+		drop(outcome.pages);
+		let error = outcome.error.map(|error| convert(&error, self.cancelled.load(Ordering::Acquire)));
+		ScanSummary { pages, error }
+	}
+
+	fn cancel(&self) {
+		self.cancelled.store(true, Ordering::Release);
+		pagescan::cancel();
+	}
+
+	fn needs_main_thread(&self) -> bool {
+		cfg!(target_os = "macos")
+	}
+}
+
+fn options(scanner: &str, settings: ScanSettings) -> ScanOptions {
+	let mut options = ScanOptions::new(scanner);
+	options.source = if settings.source.is_feeder() { SourceChoice::Feeder } else { SourceChoice::Flatbed };
+	options.duplex = settings.source == Source::FeederDuplex;
+	options.dpi = settings.dpi;
+	options.color = match settings.color {
+		ColorMode::Gray => pagescan::ColorMode::Gray,
+		ColorMode::Color => pagescan::ColorMode::Color,
+	};
+	options.timeout = TIMEOUT;
+	options
+}
+
+fn info(device: pagescan::Device) -> ScannerInfo {
+	let mut sources = Vec::new();
+	if device.sources.iter().any(|source| source.kind == SourceKind::Flatbed) {
+		sources.push(Source::Flatbed);
+	}
+	// Both sides comes first where the feeder can, so it's the feeder's default: Paperback keeps only the sides with text, which suits a one-sided stack too.
+	if device.sources.iter().any(|source| source.kind == SourceKind::Feeder && source.duplex) {
+		sources.push(Source::FeederDuplex);
+	}
+	if device.sources.iter().any(|source| source.kind == SourceKind::Feeder) {
+		sources.push(Source::Feeder);
+	}
+	ScannerInfo { id: device.id, name: device.name, sources, problem: device.error }
+}
+
+fn convert(error: &pagescan::ScanError, cancelled: bool) -> ScanError {
+	let kind = if error.kind == pagescan::ErrorKind::SaneMissing {
+		ErrorKind::SaneMissing
+	} else if cancelled {
+		ErrorKind::Cancelled
+	} else {
+		ErrorKind::Other
+	};
+	ScanError { kind, message: error.message.clone() }
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn device(sources: &[(SourceKind, bool)]) -> pagescan::Device {
+		pagescan::Device {
+			id: "id".into(),
+			name: "Scanner".into(),
+			sources: sources
+				.iter()
+				.map(|(kind, duplex)| pagescan::Source { id: "x".into(), kind: *kind, duplex: *duplex })
+				.collect(),
+			error: None,
+		}
+	}
+
+	#[test]
+	fn a_two_sided_feeder_offers_both_feeder_choices() {
+		let info = info(device(&[(SourceKind::Flatbed, false), (SourceKind::Feeder, true)]));
+		assert_eq!(info.sources, vec![Source::Flatbed, Source::FeederDuplex, Source::Feeder]);
+	}
+
+	#[test]
+	fn a_flatbed_only_scanner_offers_only_the_flatbed() {
+		assert_eq!(info(device(&[(SourceKind::Flatbed, false)])).sources, vec![Source::Flatbed]);
+	}
+
+	#[test]
+	fn settings_become_pagescan_options() {
+		let settings = ScanSettings { source: Source::FeederDuplex, dpi: 200, color: ColorMode::Gray };
+		let options = options("dev", settings);
+		assert_eq!(options.device, "dev");
+		assert_eq!(options.source, SourceChoice::Feeder);
+		assert!(options.duplex);
+		assert_eq!(options.dpi, 200);
+		assert_eq!(options.color, pagescan::ColorMode::Gray);
+		let flatbed = options_for(Source::Flatbed);
+		assert_eq!(flatbed.source, SourceChoice::Flatbed);
+		assert!(!flatbed.duplex);
+	}
+
+	fn options_for(source: Source) -> ScanOptions {
+		options("dev", ScanSettings { source, ..ScanSettings::default() })
+	}
+
+	#[test]
+	fn missing_sane_keeps_its_kind_and_a_cancel_is_recognized() {
+		let missing = pagescan::ScanError::new("no sane").with_kind(pagescan::ErrorKind::SaneMissing);
+		assert_eq!(convert(&missing, false).kind, ErrorKind::SaneMissing);
+		let stopped = pagescan::ScanError::new("The scan was cancelled.");
+		assert_eq!(convert(&stopped, true).kind, ErrorKind::Cancelled);
+		assert_eq!(convert(&stopped, false).kind, ErrorKind::Other);
+	}
+}

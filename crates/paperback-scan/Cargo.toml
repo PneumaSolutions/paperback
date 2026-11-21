@@ -1,0 +1,17 @@
+[package]
+name = "paperback-scan"
+description = "Scanner access for Paperback: list scanners and their sources, and scan pages as images"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+image = { workspace = true }
+# pagescan is Pneuma Solutions' scanner library: WIA on Windows, ImageCaptureCore on macOS, SANE (loaded at run time) on Linux.
+# TODO: switch to the crates.io release once pagescan is published; the repository is private until then.
+pagescan = { git = "https://github.com/PneumaSolutions/pagescan", rev = "6212531078a91cedd66ed2f1f71720824eef108b" }
+
+[lints]
+workspace = true

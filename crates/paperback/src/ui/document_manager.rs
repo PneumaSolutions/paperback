@@ -29,6 +29,7 @@ mod ocr;
 mod position;
 mod read_aloud;
 mod reload;
+mod scan;
 mod tabs;
 mod window;
 

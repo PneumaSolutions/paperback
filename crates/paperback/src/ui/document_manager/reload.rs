@@ -12,7 +12,7 @@ use wxdragon::prelude::*;
 use super::{
 	DocumentManager, DocumentTab,
 	lifecycle::{build_document_load_error_message, prompt_for_password, show_error_dialog},
-	ocr::{is_pdf, restore_saved_pages, saved_pages_of},
+	ocr::{joins_lines, restore_saved_pages, saved_pages_of},
 };
 use crate::{
 	text_window::{TextWindow, should_use_whole_document, target_window_bounds},
@@ -189,7 +189,7 @@ pub(super) fn parse_settings(cfg: &ConfigManager) -> ParseSettings {
 	}
 }
 
-fn reparse_tab_in_place(
+pub(super) fn reparse_tab_in_place(
 	tab: &mut DocumentTab,
 	password: &str,
 	forced_extension: &str,
@@ -223,7 +223,7 @@ fn reparse_tab_in_place(
 	restore_saved_pages(
 		&mut tab.session,
 		&saved_pages_of(&local_path),
-		is_pdf(&local_path) && settings.join_pdf_paragraphs,
+		joins_lines(&local_path) && settings.join_pdf_paragraphs,
 	);
 	// Scaled by length rather than through the whole-number percentage, which in a book of millions of characters is tens of thousands off.
 	let doc_len = tab.session.document_len();

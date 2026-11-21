@@ -23,6 +23,7 @@ mod reader_ctrl;
 mod reader_input;
 #[cfg(target_os = "windows")]
 mod rtf_stream;
+mod scan_session;
 mod selection;
 mod sleep_timer;
 mod sounds;

@@ -91,6 +91,13 @@ formats! {
 		mime_types: ["application/vnd.comicbook+zip"],
 		flags: SUPPORTS_PAGES | SUPPORTS_IMAGES | SUPPORTS_TOC,
 	},
+	/// Pages from File > Scan document: a zip of page images that Paperback writes itself, read like a comic but with its recognized lines joined into paragraphs like a scanned PDF's.
+	SCAN {
+		name: "Paperback scanned documents",
+		extensions: ["pbscan"],
+		mime_types: ["application/x-paperback-scan"],
+		flags: SUPPORTS_PAGES | SUPPORTS_IMAGES,
+	},
 	CHM {
 		name: "Compiled HTML Help files",
 		extensions: ["chm"],

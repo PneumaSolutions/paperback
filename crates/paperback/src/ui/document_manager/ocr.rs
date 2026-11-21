@@ -42,9 +42,12 @@ pub(super) struct OcrJob {
 	from_keyboard: bool,
 }
 
-/// Paragraph joining is PDF-only because the other OCR source is comics, whose lines are balloons and belong apart.
-pub(super) fn is_pdf(file_path: &Path) -> bool {
-	file_path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"))
+/// Paragraph joining is for PDFs and scanned documents, whose lines are wrapped prose; comics' lines are balloons and belong apart.
+pub(super) fn joins_lines(file_path: &Path) -> bool {
+	file_path.extension().is_some_and(|extension| {
+		extension.eq_ignore_ascii_case("pdf")
+			|| extension.eq_ignore_ascii_case(paperback_core::scan::archive::EXTENSION)
+	})
 }
 
 /// The renderer hands anything but PDFs and comics to the PDF engine, so "Include text pages" on an EPUB would otherwise start a job it can't open.
@@ -53,11 +56,12 @@ fn is_ocr_able(file_path: &Path) -> bool {
 		extension.eq_ignore_ascii_case("pdf")
 			|| extension.eq_ignore_ascii_case("cbz")
 			|| extension.eq_ignore_ascii_case("cbr")
+			|| extension.eq_ignore_ascii_case(paperback_core::scan::archive::EXTENSION)
 	})
 }
 
 pub(super) fn joins_recognized_text(local_path: &Path, config: &ConfigManager) -> bool {
-	is_pdf(local_path) && config.get_app_bool("join_pdf_paragraphs", true)
+	joins_lines(local_path) && config.get_app_bool("join_pdf_paragraphs", true)
 }
 
 pub(super) fn saved_pages_of(local_path: &Path) -> PathBuf {

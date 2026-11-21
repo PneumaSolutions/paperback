@@ -32,8 +32,8 @@ use windows::{
 			},
 			Input::KeyboardAndMouse::{
 				INPUT, INPUT_0, INPUT_KEYBOARD, KEYBD_EVENT_FLAGS, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP,
-				KEYEVENTF_UNICODE, MAPVK_VK_TO_VSC, MapVirtualKeyW, SendInput, VIRTUAL_KEY, VK_CONTROL, VK_DOWN, VK_F4,
-				VK_F5, VK_MENU, VK_OEM_1, VK_OEM_COMMA, VK_RETURN, VK_SHIFT,
+				KEYEVENTF_UNICODE, MAPVK_VK_TO_VSC, MapVirtualKeyW, SendInput, VIRTUAL_KEY, VK_CONTROL, VK_DOWN,
+				VK_ESCAPE, VK_F4, VK_F5, VK_MENU, VK_OEM_1, VK_OEM_COMMA, VK_RETURN, VK_SHIFT,
 			},
 		},
 	},
@@ -193,7 +193,10 @@ fn seeded_config() -> ConfigData {
 
 fn spawn(config_dir: &Path, argument: Option<&OsStr>) -> Child {
 	assert_no_running_instance();
-	let mut command = Command::new(env!("CARGO_BIN_EXE_paperback"));
+	// A cross-built test binary run on another machine is pointed at that machine's copy of the app.
+	let exe = std::env::var_os("PAPERBACK_TEST_EXE")
+		.map_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_paperback")), PathBuf::from);
+	let mut command = Command::new(exe);
 	if let Some(argument) = argument {
 		command.arg(argument);
 	}
@@ -393,6 +396,14 @@ pub fn enter() {
 	send_key(VK_RETURN, KEYBD_EVENT_FLAGS(0));
 }
 
+pub fn alt(key: char) {
+	chord(&[VK_MENU], letter(key));
+}
+
+pub fn escape() {
+	send_key(VK_ESCAPE, KEYBD_EVENT_FLAGS(0));
+}
+
 pub fn f5() {
 	send_key(VK_F5, KEYBD_EVENT_FLAGS(0));
 }
@@ -495,6 +506,23 @@ impl Notifications {
 			}
 			assert!(Instant::now() < deadline, "no notification {text:?} with {processing:?}; unread: {unread:?}");
 			std::thread::sleep(Duration::from_millis(100));
+		}
+	}
+}
+
+impl Notifications {
+	/// The first unread notification starting with `prefix`, however it is to be spoken; for text that depends on what was scanned.
+	pub fn wait_for_prefix(&self, prefix: &str, timeout: Duration) -> String {
+		let deadline = Instant::now() + timeout;
+		loop {
+			let received = self.received.lock().expect("notification log").clone();
+			let unread = &received[self.consumed.get()..];
+			if let Some(index) = unread.iter().position(|(t, _)| t.starts_with(prefix)) {
+				self.consumed.set(self.consumed.get() + index + 1);
+				return unread[index].0.clone();
+			}
+			assert!(Instant::now() < deadline, "no notification starting {prefix:?}; unread: {unread:?}");
+			std::thread::sleep(Duration::from_millis(200));
 		}
 	}
 }
