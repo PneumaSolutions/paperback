@@ -84,37 +84,42 @@ impl ScanArchive {
 
 	/// Returns the new page's number, counting from 1.
 	pub fn append_page(&mut self, page: &DynamicImage) -> Result<usize> {
-		self.append_png(&encode_png(page)?)
+		self.append(&encode_png(page)?, "")
 	}
 
-	pub fn append_png(&mut self, png: &[u8]) -> Result<usize> {
+	/// A page's image and its recognized lines (as [`crate::ocr::encode_pages`] writes them; empty for none), added together, so each page is written once and the archive carries its own text.
+	pub fn append(&mut self, png: &[u8], text: &str) -> Result<usize> {
 		if self.pages >= MAXIMUM_PAGES {
 			anyhow::bail!("a scanned document holds at most {MAXIMUM_PAGES} pages");
 		}
 		let number = self.pages + 1;
+		let entries = page_entries(number, png, text);
 		if self.path.exists() {
 			let file = OpenOptions::new().read(true).write(true).open(&self.path)?;
 			let mut writer = ZipWriter::new_append(file)?;
-			writer.start_file(entry_name(number), page_options())?;
-			writer.write_all(png)?;
+			for (name, data) in &entries {
+				writer.start_file(name.as_str(), page_options())?;
+				writer.write_all(data)?;
+			}
 			writer.finish()?.sync_all()?;
 		} else {
-			self.rewrite(None, Some((entry_name(number), png)))?;
+			self.rewrite(&[], &entries)?;
 		}
 		self.pages = number;
 		Ok(number)
 	}
 
-	/// For a page that read better turned around: the image the reader's OCR and any later Batch OCR see is the upright one.
-	pub fn replace_page(&mut self, number: usize, page: &DynamicImage) -> Result<()> {
-		self.replace_png(number, &encode_png(page)?)
+	/// For a page scanned again because it wasn't lined up: its image and text are replaced together. Rare, so the archive is rewritten whole.
+	pub fn replace(&mut self, number: usize, png: &[u8], text: &str) -> Result<()> {
+		if number == 0 || number > self.pages {
+			anyhow::bail!("page {number} is not in the scan");
+		}
+		let entries = page_entries(number, png, text);
+		self.rewrite(&[entry_name(number), text_entry_name(number)], &entries)
 	}
 
-	/// For a page scanned again because it wasn't lined up. Rare, so the archive is rewritten whole.
-	pub fn replace_png(&mut self, number: usize, png: &[u8]) -> Result<()> {
-		let names = page_names(&mut self.read()?);
-		let name = names.get(number.wrapping_sub(1)).with_context(|| format!("page {number} is not in the scan"))?;
-		self.rewrite(Some(name.as_str()), Some((name.clone(), png)))
+	pub fn replace_page(&mut self, number: usize, page: &DynamicImage) -> Result<()> {
+		self.replace(number, &encode_png(page)?, "")
 	}
 
 	fn read(&self) -> Result<ZipArchive<BufReader<File>>> {
@@ -122,46 +127,49 @@ impl ScanArchive {
 		Ok(ZipArchive::new(BufReader::new(file))?)
 	}
 
-	/// `replaced` is left out of the copy; `added` is written where the replaced entry was, or at the end.
-	fn rewrite(&self, replaced: Option<&str>, added: Option<(String, &[u8])>) -> Result<()> {
+	/// Entries named in `replaced` are left out of the copy; `added` is written where the first replaced entry was, or at the end.
+	fn rewrite(&self, replaced: &[String], added: &[(String, &[u8])]) -> Result<()> {
 		let dir = self.path.parent().unwrap_or_else(|| Path::new("."));
 		let temp = tempfile::Builder::new().prefix(".scan-").suffix(".tmp").tempfile_in(dir)?;
 		let mut writer = ZipWriter::new(BufWriter::new(temp));
-		let options = page_options();
-		let mut added = added;
-		if !self.path.exists() {
-			self.write_info(&mut writer)?;
-		}
+		let mut pending = Some(added);
+		let mut write_added = |writer: &mut ZipWriter<BufWriter<tempfile::NamedTempFile>>| -> Result<()> {
+			for (name, data) in pending.take().unwrap_or_default() {
+				writer.start_file(name.as_str(), page_options())?;
+				writer.write_all(data)?;
+			}
+			Ok(())
+		};
 		if self.path.exists() {
 			let mut archive = self.read()?;
 			for index in 0..archive.len() {
 				let entry = archive.by_index_raw(index)?;
-				if replaced.is_some_and(|name| entry.name().is_ok_and(|entry_name| entry_name == name)) {
+				if entry.name().is_ok_and(|name| replaced.iter().any(|replaced| *replaced == name)) {
 					drop(entry);
-					if let Some((name, png)) = added.take() {
-						writer.start_file(name, options)?;
-						writer.write_all(png)?;
-					}
+					write_added(&mut writer)?;
 					continue;
 				}
 				writer.raw_copy_file(entry)?;
 			}
+		} else {
+			self.write_info(&mut writer)?;
 		}
-		if let Some((name, png)) = added {
-			writer.start_file(name, options)?;
-			writer.write_all(png)?;
-		}
+		write_added(&mut writer)?;
 		finish(writer, &self.path)
 	}
 
 	fn write_info(&self, writer: &mut ZipWriter<BufWriter<tempfile::NamedTempFile>>) -> Result<()> {
-		writer.start_file("ComicInfo.xml", SimpleFileOptions::default())?;
-		let info = format!(
-			"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<ComicInfo>\n\t<Title>{}</Title>\n\t{SCANNED_BY}\n</ComicInfo>\n",
-			escape_xml(&self.title)
-		);
-		writer.write_all(info.as_bytes())?;
+		// Stored like the pages, so every entry can be recovered the same way.
+		writer.start_file("ComicInfo.xml", page_options())?;
+		writer.write_all(Self::info_xml(&self.title).as_bytes())?;
 		Ok(())
+	}
+
+	fn info_xml(title: &str) -> String {
+		format!(
+			"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<ComicInfo>\n\t<Title>{}</Title>\n\t{SCANNED_BY}\n</ComicInfo>\n",
+			escape_xml(title)
+		)
 	}
 }
 
@@ -201,6 +209,108 @@ pub fn is_scan(path: &Path) -> bool {
 	io::Read::take(entry, 64 * 1024).read_to_string(&mut info).is_ok() && info.contains(SCANNED_BY)
 }
 
+/// Whether the archive opens, which a crash in the middle of adding a page can prevent.
+#[must_use]
+pub fn opens(path: &Path) -> bool {
+	File::open(path).is_ok_and(|file| ZipArchive::new(BufReader::new(file)).is_ok())
+}
+
+/// Rebuilds a scan in progress whose last append was cut short. Pages are stored uncompressed with their sizes in their local headers, and an append only ever rewrites the central directory at the end, so every page before the cut is intact: the local headers are walked in order, up to the first entry that is incomplete or fails its checksum, and a new archive with those entries is written beside the old one and renamed over it. Returns how many pages were recovered; an archive with none is left as it is.
+pub fn repair(path: &Path) -> Result<usize> {
+	let bytes = fs::read(path)?;
+	let entries = intact_entries(&bytes);
+	let mut kept: Vec<(String, Vec<u8>)> = Vec::new();
+	let mut pages = 0;
+	for (name, data) in entries {
+		if is_info(&name) {
+			kept.push((name, data));
+		} else if name == entry_name(pages + 1) && data.starts_with(b"\x89PNG") {
+			pages += 1;
+			kept.push((name, data));
+		} else if name == text_entry_name(pages) {
+			kept.push((name, data));
+		} else {
+			// A gap or a stranger: what follows can't be numbered with confidence.
+			break;
+		}
+	}
+	if pages == 0 {
+		anyhow::bail!("no complete page to recover in '{}'", path.display());
+	}
+	if !kept.iter().any(|(name, _)| is_info(name)) {
+		let title = path.file_stem().map(|stem| stem.to_string_lossy().into_owned()).unwrap_or_default();
+		let info = ScanArchive::info_xml(&title);
+		kept.insert(0, ("ComicInfo.xml".to_string(), info.into_bytes()));
+	}
+	let dir = path.parent().unwrap_or_else(|| Path::new("."));
+	let temp = tempfile::Builder::new().prefix(".scan-").suffix(".tmp").tempfile_in(dir)?;
+	let mut writer = ZipWriter::new(BufWriter::new(temp));
+	for (name, data) in &kept {
+		writer.start_file(name.as_str(), page_options())?;
+		writer.write_all(data)?;
+	}
+	finish(writer, path)?;
+	tracing::info!(path = %path.display(), pages, "recovered a scan whose last page was cut short");
+	Ok(pages)
+}
+
+/// Local file headers from the start of the file, while each is whole: its name, and its data, inflated if it was deflated (as an earlier build stored `ComicInfo.xml`).
+fn intact_entries(bytes: &[u8]) -> Vec<(String, Vec<u8>)> {
+	const LOCAL_HEADER: u32 = 0x0403_4b50;
+	const HEADER_LEN: usize = 30;
+	let u16_at = |at: usize| bytes.get(at..at + 2).map(|b| u16::from_le_bytes([b[0], b[1]]));
+	let u32_at = |at: usize| bytes.get(at..at + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+	let mut entries = Vec::new();
+	let mut at = 0usize;
+	loop {
+		if u32_at(at) != Some(LOCAL_HEADER) || at + HEADER_LEN > bytes.len() {
+			break;
+		}
+		let (Some(flags), Some(method), Some(crc), Some(packed), Some(size), Some(name_len), Some(extra_len)) = (
+			u16_at(at + 6),
+			u16_at(at + 8),
+			u32_at(at + 14),
+			u32_at(at + 18),
+			u32_at(at + 22),
+			u16_at(at + 26),
+			u16_at(at + 28),
+		) else {
+			break;
+		};
+		// Sizes after the data, or past four gigabytes, are never written by Paperback.
+		if flags & 0x08 != 0 || packed == u32::MAX || size == u32::MAX {
+			break;
+		}
+		let name_start = at + HEADER_LEN;
+		let data_start = name_start + usize::from(name_len) + usize::from(extra_len);
+		let data_end = data_start.saturating_add(packed as usize);
+		let (Some(name), Some(data)) =
+			(bytes.get(name_start..name_start + usize::from(name_len)), bytes.get(data_start..data_end))
+		else {
+			break;
+		};
+		let data = match method {
+			0 => data.to_vec(),
+			8 => {
+				let mut inflated = Vec::new();
+				let limit = u64::from(size) + 1;
+				if io::Read::take(flate2::read::DeflateDecoder::new(data), limit).read_to_end(&mut inflated).is_err() {
+					break;
+				}
+				inflated
+			}
+			_ => break,
+		};
+		// A header whose sizes were never filled in (the writer stopped before going back to them) checks as empty.
+		if data.is_empty() || data.len() != size as usize || crc32fast::hash(&data) != crc {
+			break;
+		}
+		entries.push((String::from_utf8_lossy(name).into_owned(), data));
+		at = data_end;
+	}
+	entries
+}
+
 pub fn encode_png(page: &DynamicImage) -> Result<Vec<u8>> {
 	let mut png = Cursor::new(Vec::new());
 	page.write_to(&mut png, ImageFormat::Png).context("failed to encode the scanned page")?;
@@ -210,6 +320,39 @@ pub fn encode_png(page: &DynamicImage) -> Result<Vec<u8>> {
 /// Zero-padded so that an archive tool lists the pages in order too.
 fn entry_name(number: usize) -> String {
 	format!("page-{number:04}.png")
+}
+
+/// Beside its image; comic readers, Paperback's comic parser among them, pass over entries that aren't images.
+fn text_entry_name(number: usize) -> String {
+	format!("page-{number:04}.ocr")
+}
+
+fn page_entries<'a>(number: usize, png: &'a [u8], text: &'a str) -> Vec<(String, &'a [u8])> {
+	let mut entries = vec![(entry_name(number), png)];
+	if !text.is_empty() {
+		entries.push((text_entry_name(number), text.as_bytes()));
+	}
+	entries
+}
+
+/// The lines recognized on each page, as the scan stored them beside its images.
+#[must_use]
+pub fn recognized_pages(path: &Path) -> Vec<(i32, Vec<crate::ocr::RecognizedLine>)> {
+	let Ok(file) = File::open(path) else { return Vec::new() };
+	let Ok(mut archive) = ZipArchive::new(BufReader::new(file)) else { return Vec::new() };
+	let names: Vec<String> = archive
+		.file_names()
+		.filter_map(Result::ok)
+		.filter(|name| name.starts_with("page-") && name.ends_with(".ocr"))
+		.map(std::borrow::Cow::into_owned)
+		.collect();
+	let mut pages = Vec::new();
+	for name in names {
+		let Ok(entry) = archive.by_name(&name) else { continue };
+		// A page's text is a few kilobytes; anything far larger isn't ours.
+		pages.extend(crate::ocr::decode_pages(BufReader::new(entry.take(16 * 1024 * 1024))));
+	}
+	pages
 }
 
 /// The name comes from a translated string and a date, so only characters some file system refuses are replaced.
@@ -275,15 +418,105 @@ mod tests {
 		let dir = tempfile::tempdir().unwrap();
 		let mut archive = ScanArchive::create(dir.path(), "Scan").unwrap();
 		let png = encode_png(&DynamicImage::new_luma8(400, 400)).unwrap();
-		archive.append_png(&png).unwrap();
+		archive.append(&png, "").unwrap();
 		let after_one = fs::metadata(archive.path()).unwrap().len();
 		for _ in 0..20 {
-			archive.append_png(&png).unwrap();
+			archive.append(&png, "").unwrap();
 		}
 		let after_many = fs::metadata(archive.path()).unwrap().len();
 		// Each page adds its own bytes and a little directory; nothing is written twice into the file.
 		let per_page = (after_many - after_one) / 20;
 		assert!(per_page < png.len() as u64 + 200, "{per_page} bytes a page for a {} byte page", png.len());
+	}
+
+	fn text(page: i32, words: &str) -> String {
+		let line = crate::ocr::RecognizedLine { text: words.to_string(), words: vec![] };
+		crate::ocr::encode_pages(&[(page, vec![line])]).unwrap()
+	}
+
+	fn texts(archive: &ScanArchive) -> Vec<(i32, String)> {
+		recognized_pages(archive.path()).into_iter().map(|(page, lines)| (page, lines[0].text.clone())).collect()
+	}
+
+	#[test]
+	fn each_page_carries_its_text_and_a_rescan_replaces_both() {
+		let dir = tempfile::tempdir().unwrap();
+		let mut archive = ScanArchive::create(dir.path(), "Scan").unwrap();
+		archive.append(&encode_png(&page(1)).unwrap(), &text(1, "first")).unwrap();
+		archive.append(&encode_png(&page(2)).unwrap(), &text(2, "second")).unwrap();
+		assert_eq!(texts(&archive), vec![(1, "first".to_string()), (2, "second".to_string())]);
+		archive.replace(1, &encode_png(&page(10)).unwrap(), &text(1, "first again")).unwrap();
+		assert_eq!(widths(&archive), vec![10, 2]);
+		assert_eq!(texts(&archive), vec![(1, "first again".to_string()), (2, "second".to_string())]);
+		// The comic parser sees only the images.
+		let path = archive.path().to_string_lossy().into_owned();
+		assert_eq!(DocumentSession::new(&path, "", "", ParseSettings::default()).unwrap().page_count(), 2);
+	}
+
+	/// What a crash leaves when it comes in the middle of adding a page: everything before the cut, with no central directory.
+	fn cut_short(archive: &ScanArchive, keep: u64) {
+		let file = OpenOptions::new().write(true).open(archive.path()).unwrap();
+		file.set_len(keep).unwrap();
+	}
+
+	#[test]
+	fn a_scan_cut_short_in_its_last_page_is_recovered_up_to_that_page() {
+		let dir = tempfile::tempdir().unwrap();
+		let mut archive = ScanArchive::create(dir.path(), "Scan").unwrap();
+		archive.append(&encode_png(&page(1)).unwrap(), &text(1, "one")).unwrap();
+		archive.append(&encode_png(&page(2)).unwrap(), &text(2, "two")).unwrap();
+		let before_third = fs::metadata(archive.path()).unwrap().len();
+		archive.append(&encode_png(&DynamicImage::new_luma8(300, 300)).unwrap(), &text(3, "three")).unwrap();
+		// Partway into the third page's image: the central directory and the rest of the page are gone.
+		cut_short(&archive, before_third + 100);
+		assert!(!opens(archive.path()));
+		assert_eq!(repair(archive.path()).unwrap(), 2);
+		assert!(opens(archive.path()));
+		assert_eq!(widths(&archive), vec![1, 2]);
+		assert_eq!(texts(&archive), vec![(1, "one".to_string()), (2, "two".to_string())]);
+		assert!(is_scan(archive.path()), "the title and the scan mark survive");
+		assert_eq!(ScanArchive::open(archive.path()).unwrap().page_count(), 2);
+	}
+
+	#[test]
+	fn a_scan_cut_short_only_in_its_directory_keeps_every_page() {
+		let dir = tempfile::tempdir().unwrap();
+		let mut archive = ScanArchive::create(dir.path(), "Scan").unwrap();
+		for width in 1..=3 {
+			archive.append(&encode_png(&page(width)).unwrap(), &text(i32::try_from(width).unwrap(), "words")).unwrap();
+		}
+		let len = fs::metadata(archive.path()).unwrap().len();
+		cut_short(&archive, len - 30);
+		assert_eq!(repair(archive.path()).unwrap(), 3);
+		assert_eq!(widths(&archive), vec![1, 2, 3]);
+	}
+
+	#[test]
+	fn a_page_whose_header_was_never_finished_is_not_recovered() {
+		let dir = tempfile::tempdir().unwrap();
+		let mut archive = ScanArchive::create(dir.path(), "Scan").unwrap();
+		archive.append_page(&page(1)).unwrap();
+		// The next page would start where the central directory does.
+		let mut bytes = fs::read(archive.path()).unwrap();
+		let directory = bytes.windows(4).position(|window| window == [0x50, 0x4b, 0x01, 0x02]).unwrap();
+		bytes.truncate(directory);
+		// A local header with its sizes and checksum still zero, as the writer leaves it before going back to fill them in.
+		bytes.extend_from_slice(&[
+			0x50, 0x4b, 0x03, 0x04, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 0, 0, 0,
+		]);
+		bytes.extend_from_slice(b"page-0002.png\x89PNG half a page");
+		fs::write(archive.path(), bytes).unwrap();
+		assert_eq!(repair(archive.path()).unwrap(), 1);
+		assert_eq!(widths(&archive), vec![1]);
+	}
+
+	#[test]
+	fn nothing_to_recover_leaves_the_file_alone() {
+		let dir = tempfile::tempdir().unwrap();
+		let path = dir.path().join("Scan.cbz");
+		fs::write(&path, b"not a zip at all").unwrap();
+		assert!(repair(&path).is_err());
+		assert_eq!(fs::read(&path).unwrap(), b"not a zip at all");
 	}
 
 	#[test]

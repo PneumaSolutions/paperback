@@ -4,8 +4,6 @@
 
 use std::{
 	cell::RefCell,
-	collections::BTreeMap,
-	fs,
 	path::{Path, PathBuf},
 	rc::Rc,
 	sync::{Arc, Mutex, mpsc},
@@ -16,7 +14,7 @@ use std::{
 use paperback_core::{
 	config::ConfigManager,
 	document::DocPos,
-	ocr::{RecognizedLine, save_pages, saved_pages_file},
+	ocr::encode_pages,
 	scan::{
 		archive::{ScanArchive, encode_png},
 		check::{TextAmount, Turn},
@@ -39,7 +37,10 @@ use crate::{
 		store,
 	},
 	ui::{
-		dialogs::scan::{ScanningWindow, SettingsChoice, choose_save_path, show_scan_settings_dialog},
+		dialogs::scan::{
+			ScanningWindow, SettingsChoice, UnsavedChoice, ask_about_unsaved_scans, choose_save_path,
+			show_scan_settings_dialog,
+		},
 		document_manager::{DocumentManager, display_title},
 		main_window::update_title_from_manager,
 		menu,
@@ -68,9 +69,6 @@ struct Session {
 	mode: Mode,
 	archive: ScanArchive,
 	pages: usize,
-	recognized: BTreeMap<usize, Vec<RecognizedLine>>,
-	/// Named for the archive's contents, so it changes with every page; the old one is removed.
-	cache: Option<PathBuf>,
 	running: bool,
 	/// The flatbed page came out blank, probably face down, and the window waits for Rescan or Skip.
 	asking_blank: bool,
@@ -91,7 +89,8 @@ enum Event {
 		number: usize,
 		png: Vec<u8>,
 		replaces: bool,
-		lines: Vec<RecognizedLine>,
+		/// The page's recognized lines, as stored beside its image in the archive.
+		text: String,
 		amount: TextAmount,
 		turn: Option<Turn>,
 		/// Whether the page may not be lined up, and if so whether text touches an edge.
@@ -242,8 +241,6 @@ fn begin(shared: Shared, scanner: &ScannerInfo, settings: ScanSettings, skip_bla
 		mode,
 		archive,
 		pages: 0,
-		recognized: BTreeMap::new(),
-		cache: None,
 		running: false,
 		asking_blank: false,
 		rescan: None,
@@ -454,7 +451,7 @@ fn page_event(number: usize, png: Vec<u8>, replaces: bool, read: pages::ReadPage
 		number,
 		png,
 		replaces,
-		lines: read.lines,
+		text: encode_pages(&[(i32::try_from(number).unwrap_or(i32::MAX), read.lines)]).unwrap_or_default(),
 		amount: read.amount,
 		turn: read.turn,
 		out_of_line,
@@ -495,11 +492,11 @@ impl Session {
 			return;
 		}
 		match event {
-			Event::Page { number, png, replaces, lines, amount, turn, out_of_line, looks_blank, error } => {
+			Event::Page { number, png, replaces, text, amount, turn, out_of_line, looks_blank, error } => {
 				let stored = if replaces {
-					self.archive.replace_png(number, &png)
+					self.archive.replace(number, &png, &text)
 				} else {
-					self.archive.append_png(&png).map(|_| ())
+					self.archive.append(&png, &text).map(|_| ())
 				};
 				if let Err(error) = stored {
 					tracing::warn!(%error, "a scanned page could not be saved");
@@ -511,7 +508,6 @@ impl Session {
 					self.pages += 1;
 					self.run_pages += 1;
 				}
-				self.recognized.insert(number, lines);
 				self.mark_dirty();
 				let message = self.page_message(number, amount, turn, out_of_line, looks_blank, error);
 				self.say(&message, self.feeder());
@@ -625,25 +621,12 @@ impl Session {
 		}
 	}
 
-	/// The recognized text is kept where reopening the document looks for it, under the archive's current contents, and the tab re-read once for everything that arrived since the last time.
+	/// The tab re-read once for everything that arrived since the last time; each page's text is in the archive beside it.
 	fn flush(&mut self) {
 		self.dirty = false;
 		let path = self.archive.path().to_path_buf();
 		if !path.exists() {
 			return;
-		}
-		let cache = saved_pages_file(&ocr::saved_pages_dir(), &path);
-		if let Some(old) = self.cache.replace(cache.clone()) {
-			let _ = fs::remove_file(old);
-		}
-		let _ = fs::remove_file(&cache);
-		let pages: Vec<(i32, Vec<RecognizedLine>)> = self
-			.recognized
-			.iter()
-			.filter_map(|(page, lines)| Some((i32::try_from(*page).ok()?, lines.clone())))
-			.collect();
-		if let Err(error) = save_pages(&cache, &pages) {
-			tracing::warn!(%error, "could not keep a scanned document's text");
 		}
 		let dm = Rc::clone(&self.shared.dm);
 		let shown = dm.lock().unwrap().show_scan(&dm, &path);
@@ -715,6 +698,61 @@ pub(crate) fn save_to(
 	Ok(())
 }
 
+/// At start, once the documents left open are back (or straight away, when Paperback isn't set to reopen them): scans in progress that nothing reopened are offered, never deleted unasked. A scan a crash cut short has its complete pages recovered first.
+pub(crate) fn offer_unsaved_scans(frame: Frame, dm: &Rc<Mutex<DocumentManager>>, config: &Rc<Mutex<ConfigManager>>) {
+	if is_running() {
+		return;
+	}
+	let open: Vec<PathBuf> = dm.lock().unwrap().open_paths().into_iter().map(PathBuf::from).collect();
+	let unsaved = store::unsaved_scans(&open, &config.lock().unwrap());
+	if unsaved.is_empty() {
+		return;
+	}
+	let recovered = unsaved.iter().filter(|scan| scan.recovered).count();
+	match ask_about_unsaved_scans(&frame, unsaved.len(), recovered) {
+		UnsavedChoice::Open => {
+			let mut manager = dm.lock().unwrap();
+			for scan in &unsaved {
+				manager.open_file(dm, &scan.path);
+			}
+			update_title_from_manager(&frame, &manager);
+			manager.focus_document_text();
+			drop(manager);
+			let menu_bar = menu::create_menu_bar(&config.lock().unwrap());
+			frame.set_menu_bar(menu_bar);
+			menu::update_menu_item_states(&frame, true);
+		}
+		UnsavedChoice::Delete => {
+			let config = config.lock().unwrap();
+			for scan in &unsaved {
+				store::discard(&scan.path, &config);
+			}
+		}
+		UnsavedChoice::Later => {}
+	}
+}
+
+/// A scan being reopened with the other documents is repaired first if a crash cut it short; false if nothing could be saved from it.
+pub(crate) fn prepare_to_reopen(path: &Path, label: StaticText) -> bool {
+	if !store::is_in_progress(path) {
+		return true;
+	}
+	match store::recover(path) {
+		Some(true) => {
+			let title = path.file_stem().map(|stem| stem.to_string_lossy().into_owned()).unwrap_or_default();
+			// TRANSLATORS: Announced at start when a scanned document that was cut short by Paperback closing unexpectedly has been repaired; %s is its title
+			announce(
+				label,
+				t("%s was cut short when Paperback closed; its complete pages have been recovered.")
+					.replacen("%s", &title, 1),
+			);
+			true
+		}
+		Some(false) => true,
+		None => false,
+	}
+}
+
 /// The Scanning window has closed: a scan still running is stopped, and the reader is taken to the document.
 fn finish() {
 	let Some((dm, label, pages, running)) = with_session(|session| {
@@ -743,7 +781,7 @@ fn finish() {
 #[cfg(test)]
 mod tests {
 	use image::{GrayImage, Luma};
-	use paperback_core::ocr::RecognizedWord;
+	use paperback_core::ocr::{RecognizedLine, RecognizedWord};
 	use paperback_scan::{
 		ScanSettings, Scanner, ScannerInfo, Source,
 		fake::{FakeScanner, Script},
@@ -899,5 +937,10 @@ mod tests {
 		assert_eq!(events.len(), 2, "one page event and the end");
 		assert!(matches!(events[0], Event::Page { number: 1, turn: Some(Turn::Half), .. }));
 		assert!(matches!(events[1], Event::Ended(_)));
+		let Event::Page { text, .. } = &events[0] else { unreachable!() };
+		let stored = paperback_core::ocr::decode_pages(text.as_bytes());
+		assert_eq!(stored.len(), 1);
+		assert_eq!(stored[0].0, 1, "the text is stored under its page number");
+		assert!(stored[0].1[0].text.starts_with("The committee"), "{:?}", stored[0].1);
 	}
 }

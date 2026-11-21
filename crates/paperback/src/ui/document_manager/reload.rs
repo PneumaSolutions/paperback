@@ -12,7 +12,7 @@ use wxdragon::prelude::*;
 use super::{
 	DocumentManager, DocumentTab,
 	lifecycle::{build_document_load_error_message, prompt_for_password, show_error_dialog},
-	ocr::{joins_lines, restore_saved_pages, saved_pages_of},
+	ocr::{joins_lines, restore_recognized},
 };
 use crate::{
 	text_window::{TextWindow, should_use_whole_document, target_window_bounds},
@@ -220,11 +220,7 @@ pub(super) fn reparse_tab_in_place(
 	let unchanged = new_session.handle().document().buffer.content == tab.session.handle().document().buffer.content;
 	tab.session = new_session;
 	let local_path = tab.local_path().to_path_buf();
-	restore_saved_pages(
-		&mut tab.session,
-		&saved_pages_of(&local_path),
-		joins_lines(&local_path) && settings.join_pdf_paragraphs,
-	);
+	restore_recognized(&mut tab.session, &local_path, joins_lines(&local_path) && settings.join_pdf_paragraphs);
 	// Scaled by length rather than through the whole-number percentage, which in a book of millions of characters is tens of thousands off.
 	let doc_len = tab.session.document_len();
 	let proportional = || DocPos::from_raw(pos.get().saturating_mul(doc_len.get()) / old_len);

@@ -129,7 +129,7 @@ pub fn text_amount(lines: &[RecognizedLine]) -> TextAmount {
 	amount
 }
 
-/// Text that looks like text: a word with at least two letters, mostly letters, or one character of a script written without spaces. An upside-down page reads as scattered marks and short fragments.
+/// Text that looks like text: a word with at least two letters, mostly letters, or one character of a script written without spaces. An upside-down page reads as scattered marks and short fragments. A Han character counts only if it's a common one ([`super::common_han`]): read upside down, a Chinese page comes back as real but rare characters.
 #[must_use]
 pub fn plausible_text(lines: &[RecognizedLine]) -> usize {
 	lines
@@ -137,9 +137,20 @@ pub fn plausible_text(lines: &[RecognizedLine]) -> usize {
 		.flat_map(|line| line.text.split_whitespace())
 		.map(|token| {
 			let unspaced = token.chars().filter(|c| is_unspaced(*c)).count();
-			if unspaced > 0 { unspaced } else { usize::from(is_plausible(token)) }
+			if unspaced > 0 {
+				token
+					.chars()
+					.filter(|c| is_unspaced(*c) && (!is_han(*c) || super::common_han::is_common_han(*c)))
+					.count()
+			} else {
+				usize::from(is_plausible(token))
+			}
 		})
 		.sum()
+}
+
+fn is_han(c: char) -> bool {
+	matches!(u32::from(c), 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x3134F)
 }
 
 /// Han (with its compatibility and extension blocks), Hiragana, Katakana, Thai, Lao, Myanmar and Khmer. Korean is written with spaces, so Hangul counts by the word.
@@ -340,7 +351,8 @@ mod tests {
 		// OCR engines give each CJK or Thai character as its own word.
 		let japanese =
 			line(&[("今", 0.0, 0.0), ("日", 0.0, 0.0), ("は", 0.0, 0.0), ("晴", 0.0, 0.0), ("れ", 0.0, 0.0)]);
-		assert_eq!(plausible_text(std::slice::from_ref(&japanese)), 5);
+		// 晴 isn't among the common characters, which only lowers the vote; kana always count.
+		assert_eq!(plausible_text(std::slice::from_ref(&japanese)), 4);
 		let amount = text_amount(std::slice::from_ref(&japanese));
 		assert_eq!(amount, TextAmount { words: 0, characters: 5 });
 		assert!(amount.in_characters());
@@ -349,6 +361,26 @@ mod tests {
 		let korean = RecognizedLine { text: "안녕하세요 세계".to_string(), words: vec![] };
 		assert_eq!(text_amount(std::slice::from_ref(&korean)), TextAmount { words: 2, characters: 0 });
 		assert!(!is_unspaced('。'), "punctuation is not text");
+	}
+
+	/// What Windows OCR actually returned for one page of Chinese, upside down and the right way up (Windows 11, zh-Hans-CN recognizer, at the scanner's resolution).
+	#[test]
+	fn real_windows_ocr_of_upside_down_chinese_asks_for_a_turn_and_gets_it() {
+		let spaced = |text: &str| {
+			[RecognizedLine {
+				text: text.chars().filter(|c| !c.is_whitespace()).map(String::from).collect::<Vec<_>>().join(" "),
+				words: vec![],
+			}]
+		};
+		let upside_down = spaced("圭園寻腰也'孑也杲。±土兽Y工¥。身畀土±k碧。\\「／回兽'乯申二鞠旱。鞠鞋鞠旱壬¥");
+		let upright = spaced(
+			"关于提供语言协助和辅助服务的通知。我们免费为您提供语言协助服务，包括口译和笔译。如果您需要这些服务，请拨打会员服务电话。我们也提供其他格式的资料，例如大字体、盲文和音频。委员会星期二开会审查了这项提案，成员们同意在小的修改之后推进这个计划。",
+		);
+		let first = plausible_text(&upside_down);
+		assert!(worth_turning(first), "upside down read as {first} plausible characters");
+		let turned = plausible_text(&upright);
+		assert!(reads_clearly(turned), "right way up read as {turned}");
+		assert_eq!(best_turn(&[(Turn::None, first), (Turn::Half, turned)]), Turn::Half);
 	}
 
 	#[test]

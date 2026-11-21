@@ -31,6 +31,8 @@ base64 = { workspace = true }
 bitflags = { workspace = true }
 cfb = { git = "https://github.com/trypsynth/rust-cfb", branch = "permissive-repairs" }
 chardetng = "1.0.0"
+# Checks each page of a scan cut short by a crash before it is recovered.
+crc32fast = "1.5.0"
 ego-tree = "0.11.1"
 encoding_rs = "0.8.44"
 flate2 = "1.1.11"

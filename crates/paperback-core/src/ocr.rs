@@ -11,7 +11,7 @@ mod saved;
 
 pub use layout::{RecognizedLine, RecognizedWord, arrange, page_text};
 pub use pool::{Run, default_workers, recognize_pages};
-pub use saved::{load_pages, save_pages, saved_pages_file};
+pub use saved::{decode_pages, encode_pages, load_pages, save_pages, saved_pages_file};
 
 /// OCR finds these pages by their `ImageOnlyPage` marker, so this text is free to change and be translated.
 /// Literal [`t`] calls rather than a translated constant, because `xgettext` only sees string literals.

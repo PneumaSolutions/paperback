@@ -308,3 +308,81 @@ pub fn choose_save_path(parent: &dyn WxWidget, title: &str) -> Option<std::path:
 		path.with_extension("cbz")
 	})
 }
+
+/// What to do with scans in progress left from last time.
+pub enum UnsavedChoice {
+	Open,
+	Delete,
+	Later,
+}
+
+const ID_DELETE: i32 = ID_HIGHEST + 7;
+
+/// Asked at start when scans in progress were left by quitting or a crash and nothing reopened them. Nothing is deleted unless the reader chooses Delete and confirms it.
+pub fn ask_about_unsaved_scans(parent: &dyn WxWidget, count: usize, recovered: usize) -> UnsavedChoice {
+	// TRANSLATORS: Title of the question asked at start about scanned documents that were never saved
+	let dialog = Dialog::builder(parent, &t("Unsaved Scans")).build();
+	let _destroy = super::DestroyOnDrop(dialog);
+	let padding = dialog_padding(&dialog);
+	let count_u64 = u64::try_from(count).unwrap_or(u64::MAX);
+	// TRANSLATORS: Asked at start; %d is the number of scanned documents left unsaved when Paperback last closed
+	let mut message = patois::nt(
+		"Paperback found %d unsaved scan from last time.",
+		"Paperback found %d unsaved scans from last time.",
+		count_u64,
+	)
+	.replacen("%d", &count.to_string(), 1);
+	if recovered > 0 {
+		let recovered_u64 = u64::try_from(recovered).unwrap_or(u64::MAX);
+		// TRANSLATORS: Part of the question asked at start; %d is how many of the unsaved scans were cut short by Paperback closing unexpectedly, and repaired
+		let note = patois::nt(
+			"%d of them was cut short when Paperback closed unexpectedly, and its complete pages have been recovered.",
+			"%d of them were cut short when Paperback closed unexpectedly, and their complete pages have been recovered.",
+			recovered_u64,
+		)
+		.replacen("%d", &recovered.to_string(), 1);
+		message = format!("{message} {note}");
+	}
+	// TRANSLATORS: The end of the question asked at start about unsaved scans; Open, Delete and Keep for Later are its buttons
+	message = format!("{message} {}", t("Open them now? Keep for Later asks again next time."));
+	let label = StaticText::builder(&dialog).with_label(&message).build();
+	label.wrap(460);
+	// TRANSLATORS: Button that opens the unsaved scans found at start
+	let open = Button::builder(&dialog).with_id(ID_OK).with_label(&t("&Open")).build();
+	// TRANSLATORS: Button that deletes the unsaved scans found at start, after asking to confirm
+	let delete = Button::builder(&dialog).with_id(ID_DELETE).with_label(&t("&Delete...")).build();
+	// TRANSLATORS: Button that leaves the unsaved scans found at start for next time
+	let later = Button::builder(&dialog).with_id(ID_CANCEL).with_label(&t("&Keep for Later")).build();
+	delete.on_click(move |_| dialog.end_modal(ID_DELETE));
+	dialog.set_escape_id(ID_CANCEL);
+	dialog.set_affirmative_id(ID_OK);
+	open.set_default();
+	let buttons = BoxSizer::builder(Orientation::Horizontal).build();
+	for button in [open, delete, later] {
+		buttons.add(&button, 0, SizerFlag::Right, padding / 2);
+	}
+	let content = BoxSizer::builder(Orientation::Vertical).build();
+	content.add(&label, 0, SizerFlag::All, padding);
+	content.add_sizer(&buttons, 0, SizerFlag::All | SizerFlag::AlignRight, padding);
+	dialog.set_sizer_and_fit(content, true);
+	dialog.centre();
+	open.set_focus();
+	match dialog.show_modal() {
+		ID_OK => UnsavedChoice::Open,
+		ID_DELETE => {
+			// TRANSLATORS: Confirmation before deleting the unsaved scans found at start; %d is how many
+			let confirm = patois::nt(
+				"Delete %d unsaved scan? This can't be undone.",
+				"Delete %d unsaved scans? This can't be undone.",
+				count_u64,
+			)
+			.replacen("%d", &count.to_string(), 1);
+			if wx_utils::confirm(parent, confirm, &t("Unsaved Scans")) {
+				UnsavedChoice::Delete
+			} else {
+				UnsavedChoice::Later
+			}
+		}
+		_ => UnsavedChoice::Later,
+	}
+}

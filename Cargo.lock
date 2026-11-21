@@ -3199,6 +3199,7 @@ dependencies = [
  "bitflags 2.13.2",
  "cfb",
  "chardetng",
+ "crc32fast",
  "ego-tree",
  "encoding_rs",
  "flate2",

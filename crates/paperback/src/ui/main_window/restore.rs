@@ -1,9 +1,4 @@
-use std::{
-	cell::RefCell,
-	path::{Path, PathBuf},
-	rc::Rc,
-	sync::Mutex,
-};
+use std::{cell::RefCell, path::Path, rc::Rc, sync::Mutex};
 
 use paperback_core::{config::ConfigManager, parser::is_remote_url};
 use wxdragon::prelude::*;
@@ -22,11 +17,12 @@ pub(super) fn schedule_restore_documents(
 	frame: Frame,
 	doc_manager: Rc<Mutex<DocumentManager>>,
 	config: Rc<Mutex<ConfigManager>>,
+	live_region_label: StaticText,
 ) {
 	let restore = config.lock().unwrap().get_app_bool("restore_previous_documents", true);
 	if !restore {
-		// Nothing will be reopened, so no scan in progress can be reached again.
-		crate::scanning::store::sweep(&[], &config.lock().unwrap());
+		// Nothing is reopened, so scans in progress left from last time are offered once the window is up.
+		offer_unsaved_scans_soon(frame, doc_manager, config);
 		return;
 	}
 	let state = Rc::new(Mutex::new(RestoreState::default()));
@@ -64,6 +60,9 @@ pub(super) fn schedule_restore_documents(
 				tracing::info!(path = %path.display(), "previously open document is missing; forgetting it");
 				return false;
 			}
+			if !crate::ui::scan_session::prepare_to_reopen(path, live_region_label) {
+				return false;
+			}
 			if !ensure_parser_ready_for_path(&frame, path, &config) {
 				return false;
 			}
@@ -80,20 +79,32 @@ pub(super) fn schedule_restore_documents(
 		let (dm, cfg) = (Rc::clone(&doc_manager), Rc::clone(&config));
 		// After the links open, since opening them selects their tabs.
 		open_links_then(&frame, &doc_manager, &config, plan.links, move || {
-			let open: Vec<PathBuf> = dm.lock().unwrap().open_paths().into_iter().map(PathBuf::from).collect();
-			// Not while a scan is starting, whose archive has no tab until its first page.
-			if !crate::ui::scan_session::is_running() {
-				crate::scanning::store::sweep(&open, &cfg.lock().unwrap());
-			}
 			select_restored_tab(&dm, pre_restore_active, &active_path);
 			update_title_from_manager(&frame, &dm.lock().unwrap());
 			rebuild_menu_bar(&frame, &dm, &cfg);
 			dm.lock().unwrap().restore_focus();
 			// A large book keeps the window busy for seconds, and a screen reader told about focus meanwhile is left silent on it (#920); repeating it costs nothing otherwise.
 			focus_again_once_settled(&frame, &dm);
+			crate::ui::scan_session::offer_unsaved_scans(frame, &dm, &cfg);
 		});
 	});
 }
+
+fn offer_unsaved_scans_soon(frame: Frame, doc_manager: Rc<Mutex<DocumentManager>>, config: Rc<Mutex<ConfigManager>>) {
+	let timer_holder: Rc<RefCell<Option<Timer<Frame>>>> = Rc::new(RefCell::new(None));
+	let holder = Rc::clone(&timer_holder);
+	let timer = Timer::new(&frame);
+	timer.on_tick(move |_event| {
+		*holder.borrow_mut() = None;
+		crate::ui::scan_session::offer_unsaved_scans(frame, &doc_manager, &config);
+	});
+	if timer.start(OFFER_DELAY_MS, true) {
+		*timer_holder.borrow_mut() = Some(timer);
+	}
+}
+
+/// After the window has come up and the screen reader has spoken it.
+const OFFER_DELAY_MS: i32 = 1500;
 
 const RESTORE_DOWNLOAD_LIMIT: u64 = 2 * 1024 * 1024;
 

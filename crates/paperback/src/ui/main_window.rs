@@ -149,7 +149,7 @@ impl MainWindow {
 			#[cfg(target_os = "windows")]
 			&hotkey_handle,
 		);
-		restore::schedule_restore_documents(frame, Rc::clone(&doc_manager), Rc::clone(&config));
+		restore::schedule_restore_documents(frame, Rc::clone(&doc_manager), Rc::clone(&config), live_region_label);
 		Self {
 			frame,
 			doc_manager,

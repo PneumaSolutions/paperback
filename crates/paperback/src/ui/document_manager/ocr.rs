@@ -68,7 +68,27 @@ pub(super) fn saved_pages_of(local_path: &Path) -> PathBuf {
 }
 
 pub(super) fn restore_saved_pages(session: &mut DocumentSession, saved: &Path, join: bool) {
-	let saved_pages = load_pages(saved);
+	apply_saved(session, load_pages(saved), join, saved);
+}
+
+/// A scan carries its own text, beside each page's image; anything recognized since (Recognize Current Page, Batch OCR) is in the saved-pages store and read over it.
+pub(super) fn restore_recognized(session: &mut DocumentSession, local_path: &Path, join: bool) {
+	let saved = saved_pages_of(local_path);
+	if is_cbz(local_path) && paperback_core::scan::archive::is_scan(local_path) {
+		let mut pages: std::collections::BTreeMap<i32, Vec<RecognizedLine>> =
+			paperback_core::scan::archive::recognized_pages(local_path).into_iter().collect();
+		pages.extend(load_pages(&saved));
+		apply_saved(session, pages.into_iter().collect(), join, local_path);
+	} else {
+		restore_saved_pages(session, &saved, join);
+	}
+}
+
+fn is_cbz(path: &Path) -> bool {
+	path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("cbz"))
+}
+
+fn apply_saved(session: &mut DocumentSession, saved_pages: Vec<(i32, Vec<RecognizedLine>)>, join: bool, from: &Path) {
 	let pages: Vec<(i32, String)> = saved_pages
 		.into_iter()
 		.map(|(page, lines)| (page, page_text(&lines, join)))
@@ -76,7 +96,7 @@ pub(super) fn restore_saved_pages(session: &mut DocumentSession, saved: &Path, j
 		.collect();
 	if !pages.is_empty() {
 		session.replace_ocr_pages(&pages);
-		tracing::debug!(path = %saved.display(), pages = pages.len(), "put back the pages ocr read before");
+		tracing::debug!(path = %from.display(), pages = pages.len(), "put back the pages ocr read before");
 	}
 }
 

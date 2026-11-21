@@ -6,7 +6,7 @@ use wxdragon::prelude::*;
 
 use super::{
 	DocumentManager, DocumentTab, POSITION_SAVE_INTERVAL_SECS,
-	ocr::{joins_recognized_text, restore_saved_pages, saved_pages_of},
+	ocr::{joins_recognized_text, restore_recognized},
 	parse_settings, read_fingerprint, reading_path, title_or_filename,
 };
 use crate::{
@@ -156,7 +156,7 @@ impl DocumentManager {
 		let config = self.config.lock().unwrap();
 		let mut session = session;
 		// Before the position is read, since it was saved against the text OCR put in.
-		restore_saved_pages(&mut session, &saved_pages_of(&local_path), joins_recognized_text(&local_path, &config));
+		restore_recognized(&mut session, &local_path, joins_recognized_text(&local_path, &config));
 		let word_wrap = config.get_app_bool("word_wrap", false);
 		let text_ctrl =
 			reader_input::build_text_ctrl(panel, word_wrap, self_rc, self.frame, self.from_keyboard.clone());

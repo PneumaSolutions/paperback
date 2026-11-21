@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: paperback 1.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-21 14:02-0500\n"
+"POT-Creation-Date: 2026-11-21 15:22-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -998,6 +998,7 @@ msgid "Missing"
 msgstr ""
 
 #. TRANSLATORS: Button label to open the selected document
+#. TRANSLATORS: Button that opens the unsaved scans found at start
 msgid "&Open"
 msgstr ""
 
@@ -1798,6 +1799,37 @@ msgstr ""
 #. TRANSLATORS: File type in the Save Scan As file picker; keep the (*.cbz) and the |*.cbz after it as they are
 msgid "Comic book archives (*.cbz)|*.cbz"
 msgstr ""
+
+#. TRANSLATORS: Title of the question asked at start about scanned documents that were never saved
+msgid "Unsaved Scans"
+msgstr ""
+
+msgid "Paperback found %d unsaved scan from last time."
+msgid_plural "Paperback found %d unsaved scans from last time."
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%d of them was cut short when Paperback closed unexpectedly, and its complete pages have been recovered."
+msgid_plural "%d of them were cut short when Paperback closed unexpectedly, and their complete pages have been recovered."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: The end of the question asked at start about unsaved scans; Open, Delete and Keep for Later are its buttons
+msgid "Open them now? Keep for Later asks again next time."
+msgstr ""
+
+#. TRANSLATORS: Button that deletes the unsaved scans found at start, after asking to confirm
+msgid "&Delete..."
+msgstr ""
+
+#. TRANSLATORS: Button that leaves the unsaved scans found at start for next time
+msgid "&Keep for Later"
+msgstr ""
+
+msgid "Delete %d unsaved scan? This can't be undone."
+msgid_plural "Delete %d unsaved scans? This can't be undone."
+msgstr[0] ""
+msgstr[1] ""
 
 msgid "System-Wide"
 msgstr ""
@@ -2900,6 +2932,9 @@ msgstr ""
 
 #. TRANSLATORS: Announced after a scanned document is saved; %s is the file name it was saved as
 msgid "Saved as %s."
+msgstr ""
+
+msgid "%s was cut short when Paperback closed; its complete pages have been recovered."
 msgstr ""
 
 #. TRANSLATORS: Announced after text is copied, with Ctrl+C or from the marked beginning of a selection. The %d placeholder is replaced with the number of characters copied. Plural form is chosen by that count.

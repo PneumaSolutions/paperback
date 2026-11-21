@@ -50,24 +50,38 @@ pub fn save_pages(file: &Path, pages: &[(i32, Vec<RecognizedLine>)]) -> io::Resu
 		fs::create_dir_all(dir)?;
 	}
 	let mut out = OpenOptions::new().create(true).append(true).open(file)?;
+	let text = if out.metadata()?.len() == 0 { encode_pages(pages)? } else { encode_records(pages)? };
+	out.write_all(text.as_bytes())
+}
+
+/// The same layout as a saved-pages file, header included, for keeping a page's lines somewhere else: a scanned document keeps each page's in the archive beside its image.
+pub fn encode_pages(pages: &[(i32, Vec<RecognizedLine>)]) -> io::Result<String> {
+	let mut text = serde_json::to_string(&Header { version: VERSION })?;
+	text.push('\n');
+	text.push_str(&encode_records(pages)?);
+	Ok(text)
+}
+
+fn encode_records(pages: &[(i32, Vec<RecognizedLine>)]) -> io::Result<String> {
 	let mut text = String::new();
-	if out.metadata()?.len() == 0 {
-		text.push_str(&serde_json::to_string(&Header { version: VERSION })?);
-		text.push('\n');
-	}
 	for (page, lines) in pages {
 		let page = Page { page: *page, lines: lines.iter().map(kept).collect() };
 		text.push_str(&serde_json::to_string(&page)?);
 		text.push('\n');
 	}
-	out.write_all(text.as_bytes())
+	Ok(text)
 }
 
 /// A line that cannot be read, such as one cut short when the app closed while writing it, is passed over.
 #[must_use]
 pub fn load_pages(file: &Path) -> Vec<(i32, Vec<RecognizedLine>)> {
 	let Ok(input) = File::open(file) else { return Vec::new() };
-	let mut records = BufReader::new(input).lines().map_while(Result::ok);
+	decode_pages(BufReader::new(input))
+}
+
+/// Reads what [`encode_pages`] or [`save_pages`] wrote; the last reading of a page counts.
+pub fn decode_pages(input: impl BufRead) -> Vec<(i32, Vec<RecognizedLine>)> {
+	let mut records = input.lines().map_while(Result::ok);
 	let known = records
 		.next()
 		.and_then(|header| serde_json::from_str::<Header>(&header).ok())
@@ -156,6 +170,14 @@ mod tests {
 		text.push_str("{\"page\":2,\"lines\":[{\"te");
 		fs::write(&file, text).unwrap();
 		assert_eq!(load_pages(&file), vec![(1, vec![line("one", 0.0)])]);
+	}
+
+	#[test]
+	fn encoded_pages_decode_to_what_was_read() {
+		let pages = vec![(4, vec![line("four", 3.0)])];
+		let text = super::encode_pages(&pages).unwrap();
+		assert_eq!(super::decode_pages(text.as_bytes()), pages);
+		assert!(super::decode_pages(&b"not a header"[..]).is_empty());
 	}
 
 	#[test]

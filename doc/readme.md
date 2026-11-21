@@ -119,9 +119,11 @@ Paperback tells you, in plain words, when something about a page looks wrong:
 
 ### Saving what you scanned
 
-A new scan is a work in progress, kept in the `scans` folder in Paperback's settings folder until you save it. To keep it, choose File > Save Scan As and pick where it goes. It's saved as a comic book archive (`.cbz`) of the page images, which Paperback and other comic book readers open. The text Paperback read is kept with it, so reopening it doesn't run OCR again. After saving, the saved copy is the one open in Paperback.
+A new scan is a work in progress, kept in the `scans` folder in Paperback's settings folder until you save it. To keep it, choose File > Save Scan As and pick where it goes. It's saved as a comic book archive (`.cbz`) of the page images, which Paperback and other comic book readers open. The text Paperback read is stored inside the archive, beside each page, so reopening it, even on another computer, doesn't run OCR again; other comic readers simply ignore it. After saving, the saved copy is the one open in Paperback.
 
-When you close a scan you haven't saved, Paperback asks whether to save it first. If you choose Don't Save, the scan is deleted. A scan still open when you quit Paperback comes back the next time if Paperback is set to reopen your documents, and is deleted otherwise.
+When you close a scan you haven't saved, Paperback asks whether to save it first. If you choose Don't Save, the scan is deleted.
+
+Paperback never deletes a scan you haven't chosen to delete. A scan still open when you quit comes back the next time if Paperback is set to reopen your documents. Otherwise, or if it wasn't reopened, Paperback tells you at start how many unsaved scans it found from last time and offers to open them: choose Open, Delete (which asks you to confirm), or Keep for Later to be asked again next time. If Paperback closed unexpectedly while adding a page, the scan is repaired at the next start: every page that was complete is kept, and Paperback tells you so.
 
 To save just the text, use File > Export to Plain Text or Export to Markdown. To read a page again, use Recognize Current Page (`Ctrl+Shift+R`).
 
