@@ -239,10 +239,12 @@ pub(crate) fn close_active_document_announced(dm: &mut DocumentManager, live_reg
 		return;
 	};
 	let next = dm.active_index_after_closing(index).and_then(|i| dm.get_tab(i)).map(display_title);
-	if let Some(next) = &next {
+	// Only once it has closed: closing an unsaved scan asks first, and Cancel leaves the reader where they were.
+	if dm.close_document(index, true)
+		&& let Some(next) = &next
+	{
 		announce(live_region_label, next);
 	}
-	dm.close_document(index, true);
 }
 
 pub(crate) fn rebuild_menu_bar(

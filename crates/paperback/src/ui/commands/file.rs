@@ -106,9 +106,15 @@ pub fn close_all(ctx: &Ctx) {
 	let mut dm = ctx.dm.lock().unwrap();
 	dm.close_all_documents();
 	update_title_from_manager(ctx.frame, &dm);
-	dm.notebook().set_focus();
+	// A scan the reader chose not to lose stops Close All, and it and the rest stay open.
+	let has_docs = dm.tab_count() > 0;
+	if has_docs {
+		dm.restore_focus();
+	} else {
+		dm.notebook().set_focus();
+	}
 	drop(dm);
-	menu::update_menu_item_states(ctx.frame, false);
+	menu::update_menu_item_states(ctx.frame, has_docs);
 	menu::update_reopen_state(ctx.frame, true);
 }
 
