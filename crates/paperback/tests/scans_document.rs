@@ -33,5 +33,5 @@ fn a_flatbed_page_is_scanned_read_and_opened_as_a_document() {
 	let text = common::reader_text(app.pid).unwrap_or_default();
 	assert!(!text.contains("[Image only"), "the page's text never arrived: {text}");
 	let scans = app.config_dir().join("scans");
-	assert!(scans.join("Scan.pbscan").exists(), "no archive in {}", scans.display());
+	assert!(scans.join("Scan.cbz").exists(), "no archive in {}", scans.display());
 }

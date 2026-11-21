@@ -66,7 +66,6 @@ Paperback supports the following formats and extensions:
 * OpenDocument presentations (`.odp`, `.fodp`)
 * OpenDocument text files (`.odt`, `.fodt`)
 * OS/2 help files and books, with their pictures (`.inf`, `.hlp`)
-* Paperback scanned documents, made with File > Scan Document (`.pbscan`)
 * PDF documents (`.pdf`)
 * Qt help files, the documentation Qt Assistant and Qt Creator read, such as Qt's and CMake's own (`.qch`)
 * QRead books, the copies QRead saved of each book it opened (`.qrd`)
@@ -89,10 +88,10 @@ The first time, Paperback looks for scanners, which can take a few seconds, and 
 
 In the Scan Document dialog you choose:
 
-* Source: Flatbed (the glass), Document feeder, both sides, or Document feeder, one side. Only the sources your scanner has are listed.
+* Source: Flatbed (the glass), Document feeder, one side, or Document feeder, both sides. Only the sources your scanner has are listed.
 * Color: Grayscale, the default, or Color. OCR reads grayscale as well as color, and grayscale pages are a third of the size.
 * Resolution: 300 DPI by default, which is what OCR works best at. Not every scanner offers every resolution; if yours doesn't, Paperback says so.
-* Keep blank sides, for the document feeder scanning both sides. See below.
+* Skip blank sides, for the document feeder scanning both sides. It's off unless you turn it on. See below.
 
 Paperback remembers these settings for each scanner separately.
 
@@ -104,7 +103,7 @@ Put a page face down on the glass and choose Scan. Paperback scans it, opens the
 
 Load the pages and choose Scan. Paperback scans them all and announces each page as its text is read. When the feeder is empty it tells you how many pages it scanned. To scan more pages into the same document, load them and press Enter; press Escape to finish.
 
-With Document feeder, both sides, Paperback scans the front and back of every sheet and keeps only the sides with real text on them, so a stack printed on one side comes out as just its printed pages, whichever way up you loaded it, while pages printed on both sides keep both. It decides by the words OCR finds on a side, not by how dark it looks, so show-through from the other side of thin paper doesn't count as text. Only the pages it keeps are announced, and at the end it sums up, for example "5 sheets, 7 pages, 3 blank sides skipped." To keep every side, blank or not, check Keep blank sides. To scan one side only, choose Document feeder, one side.
+Document feeder, both sides, scans the front and back of every sheet and keeps both. If you check Skip blank sides, Paperback keeps only the sides with real text on them, so a stack printed on one side comes out as just its printed pages, whichever way up you loaded it. It decides by the words OCR finds on a side, not by how dark it looks, so show-through from the other side of thin paper doesn't count as text. That also means a side with only a photo, a signature or handwriting can be skipped, which is why the option is off by default. With it on, only the pages kept are announced, and at the end Paperback sums up, for example "5 sheets, 7 pages, 3 blank sides skipped."
 
 The document opens after the first page, and each page's text appears as soon as it has been read, so you can start reading while later pages are still being scanned or read.
 
@@ -113,14 +112,16 @@ The document opens after the first page, and each page's text appears as soon as
 Paperback tells you, in plain words, when something about a page looks wrong:
 
 * A page upside down or sideways is turned the right way up automatically, and Paperback says so briefly, for example "Page 3 was upside down; corrected." You don't need to do anything.
-* A blank page is usually one placed face down. On the flatbed, Paperback asks you to turn it over and choose Rescan, or choose Skip to leave it out. From the one-sided document feeder, blank pages are left out, and at the end Paperback tells you how many, since they might have been face down.
-* Very little text, or text that touches the edge of the scan, can mean the page isn't lined up. On the flatbed, Paperback offers to scan it again: straighten it and choose Rescan, or choose Skip to keep it as it is. From the document feeder it tells you which page it was.
-
-Rescan and Skip are offered only for these two cases, blank pages and pages that may not be lined up.
+* A blank page is usually one placed face down. On the flatbed, Paperback stops and asks: turn the page over and choose Rescan, or choose Skip to leave it out. From the one-sided document feeder, blank pages are left out, and at the end Paperback tells you how many, since they might have been face down.
+* Very little text, or text that touches the edge of the scan, can mean the page isn't lined up. Paperback says so but doesn't stop: on the flatbed, a Rescan button appears beside Scan Next Page. Straighten the page and choose Rescan to scan it again in its place, or just press Enter to go on to the next page. From the document feeder it tells you which page it was.
 
 ### Saving what you scanned
 
-A scanned document is kept in the `scans` folder in Paperback's settings folder, and appears in Recent Documents like any other document. File > Reveal File in Folder shows it. To save its text, use File > Export to Plain Text or Export to Markdown. The text Paperback read is kept with the document, so reopening it doesn't run OCR again; to read a page again, use Recognize Current Page (`Ctrl+Shift+R`).
+A new scan is a work in progress, kept in the `scans` folder in Paperback's settings folder until you save it. To keep it, choose File > Save Scan As and pick where it goes. It's saved as a comic book archive (`.cbz`) of the page images, which Paperback and other comic book readers open. The text Paperback read is kept with it, so reopening it doesn't run OCR again. After saving, the saved copy is the one open in Paperback.
+
+When you close a scan you haven't saved, Paperback asks whether to save it first. If you choose Don't Save, the scan is deleted. A scan still open when you quit Paperback comes back the next time if Paperback is set to reopen your documents, and is deleted otherwise.
+
+To save just the text, use File > Export to Plain Text or Export to Markdown. To read a page again, use Recognize Current Page (`Ctrl+Shift+R`).
 
 On Linux, scanning needs SANE: install `sane-utils`, and `sane-airscan` for network scanners, from your package manager. If SANE isn't installed, Paperback says so.
 
@@ -136,7 +137,7 @@ Punctuation shortcuts are named after the keys of a US keyboard. On another layo
 
 * `Ctrl+O`: Open a document.
 * `Ctrl+L` (macOS: `Cmd+Option+O`): Open a document from a web link.
-* Scan Document has no shortcut of its own; you can give it one in Customize Keyboard Shortcuts.
+* Scan Document and Save Scan As have no shortcuts of their own; you can give them one in Customize Keyboard Shortcuts.
 * `Ctrl+F4` (macOS: `Cmd+W`): Close the current document.
 * `Ctrl+Shift+F4` (macOS: `Cmd+Shift+W`): Close all open documents.
 * `Ctrl+Shift+T`: Reopen the last closed document.

@@ -263,6 +263,7 @@ mod tests {
 				ActionId::Open,
 				ActionId::OpenFromUrl,
 				ActionId::ScanDocument,
+				ActionId::SaveScanAs,
 				ActionId::Close,
 				ActionId::CloseAll,
 				ActionId::ReopenLastClosed,

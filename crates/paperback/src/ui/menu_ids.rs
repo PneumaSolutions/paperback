@@ -28,7 +28,7 @@ pub const SELECT_ALL: i32 = wxdragon::ffi::WXD_ID_SELECTALL as i32;
 // Above wxWidgets' stock ids, which run from 5000 to 5999. One of ours landing on a stock id takes on its meaning: on macOS wxID_CUT, wxID_COPY, wxID_PASTE and wxID_CLEAR are bound to the native cut:, copy:, paste: and delete: actions instead of to our handler.
 const BASE: i32 = ID_HIGHEST + 1;
 
-seq_ids!(BASE => OPEN, CLOSE, CLOSE_ALL, SHOW_ALL_DOCUMENTS, REOPEN_LAST_CLOSED, CLEAR_RECENT_DOCUMENTS, RELOAD, OPEN_FROM_URL, SCAN_DOCUMENT);
+seq_ids!(BASE => OPEN, CLOSE, CLOSE_ALL, SHOW_ALL_DOCUMENTS, REOPEN_LAST_CLOSED, CLEAR_RECENT_DOCUMENTS, RELOAD, OPEN_FROM_URL, SCAN_DOCUMENT, SAVE_SCAN_AS);
 
 pub const RECENT_DOCUMENT_BASE: i32 = BASE + 100;
 pub const RECENT_DOCUMENT_MAX: i32 = BASE + 199;
@@ -196,6 +196,7 @@ pub const fn action_to_menu_id(action: paperback_core::config::ActionId) -> i32 
 		ActionId::SleepTimer => SLEEP_TIMER,
 		ActionId::BatchOcr => BATCH_OCR,
 		ActionId::ScanDocument => SCAN_DOCUMENT,
+		ActionId::SaveScanAs => SAVE_SCAN_AS,
 		ActionId::RecognizeCurrentPage => RECOGNIZE_CURRENT_PAGE,
 		ActionId::CustomizeShortcuts => CUSTOMIZE_SHORTCUTS,
 		ActionId::ImportDocumentData => IMPORT_DOCUMENT_DATA,

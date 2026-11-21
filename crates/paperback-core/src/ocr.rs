@@ -55,10 +55,7 @@ enum Source {
 impl PageRenderer {
 	pub fn open(file_path: &str, password: Option<&str>) -> Result<Self> {
 		let extension = Path::new(file_path).extension();
-		// A scanned document is a zip of page images, so it renders like a comic.
-		if extension
-			.is_some_and(|e| e.eq_ignore_ascii_case("cbz") || e.eq_ignore_ascii_case(crate::scan::archive::EXTENSION))
-		{
+		if extension.is_some_and(|e| e.eq_ignore_ascii_case("cbz")) {
 			return Self::open_comic(file_path);
 		}
 		if extension.is_some_and(|e| e.eq_ignore_ascii_case("cbr")) {

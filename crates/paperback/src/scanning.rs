@@ -3,3 +3,4 @@
 pub mod messages;
 pub mod pages;
 pub mod remembered;
+pub mod store;

@@ -42,12 +42,12 @@ pub(super) struct OcrJob {
 	from_keyboard: bool,
 }
 
-/// Paragraph joining is for PDFs and scanned documents, whose lines are wrapped prose; comics' lines are balloons and belong apart.
+/// Paragraph joining is for PDFs and Paperback's own scans, whose lines are wrapped prose; other comics' lines are balloons and belong apart.
 pub(super) fn joins_lines(file_path: &Path) -> bool {
-	file_path.extension().is_some_and(|extension| {
-		extension.eq_ignore_ascii_case("pdf")
-			|| extension.eq_ignore_ascii_case(paperback_core::scan::archive::EXTENSION)
-	})
+	let extension = file_path.extension();
+	extension.is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"))
+		|| (extension.is_some_and(|extension| extension.eq_ignore_ascii_case("cbz"))
+			&& paperback_core::scan::archive::is_scan(file_path))
 }
 
 /// The renderer hands anything but PDFs and comics to the PDF engine, so "Include text pages" on an EPUB would otherwise start a job it can't open.
@@ -56,7 +56,6 @@ fn is_ocr_able(file_path: &Path) -> bool {
 		extension.eq_ignore_ascii_case("pdf")
 			|| extension.eq_ignore_ascii_case("cbz")
 			|| extension.eq_ignore_ascii_case("cbr")
-			|| extension.eq_ignore_ascii_case(paperback_core::scan::archive::EXTENSION)
 	})
 }
 

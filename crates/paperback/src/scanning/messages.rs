@@ -44,7 +44,7 @@ pub fn page_read(number: usize, words: usize, turn: Option<Turn>) -> String {
 	message
 }
 
-/// For a page with text against an edge or very little text. `can_rescan` is false for a feeder, which can't take one page back.
+/// For a page with text against an edge or very little text. Said without stopping the scan: Rescan is offered beside the next page, never asked. `can_rescan` is false for a feeder, which can't take one page back.
 #[must_use]
 pub fn not_lined_up(cut_off: bool, can_rescan: bool) -> String {
 	let problem = if cut_off {
@@ -55,8 +55,11 @@ pub fn not_lined_up(cut_off: bool, can_rescan: bool) -> String {
 		t("Only a little text was found, so the page might not be lined up.")
 	};
 	if can_rescan {
-		// TRANSLATORS: Said after a flatbed page that might not be lined up; Rescan and Skip are buttons
-		format!("{problem} {}", t("Straighten it and choose Rescan, or choose Skip to keep it as it is."))
+		// TRANSLATORS: Said after a flatbed page that might not be lined up; Rescan is a button and Enter a key, and scanning goes on unless Rescan is chosen
+		format!(
+			"{problem} {}",
+			t("To scan it again, straighten it and choose Rescan. Otherwise press Enter to go on to the next page.")
+		)
 	} else {
 		problem
 	}

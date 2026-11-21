@@ -105,6 +105,15 @@ pub static COMMANDS: &[Command] = &[
 		behavior: Behavior::Run(file::scan_document),
 	},
 	Command {
+		action: ActionId::SaveScanAs,
+		// TRANSLATORS: Menu item in the File menu to save a scanned document somewhere to keep it
+		label: || t("Sa&ve Scan As..."),
+		// TRANSLATORS: Status-bar help text for the File > Save Scan As menu item.
+		help: Some(|| t("Save the scanned document to keep it")),
+		enable: Enable::HasDocument,
+		behavior: Behavior::Run(file::save_scan_as),
+	},
+	Command {
 		action: ActionId::Close,
 		// TRANSLATORS: Menu item in the File menu to close the current document.
 		label: || t("&Close"),

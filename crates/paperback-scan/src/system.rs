@@ -71,12 +71,11 @@ fn info(device: pagescan::Device) -> ScannerInfo {
 	if device.sources.iter().any(|source| source.kind == SourceKind::Flatbed) {
 		sources.push(Source::Flatbed);
 	}
-	// Both sides comes first where the feeder can, so it's the feeder's default: Paperback keeps only the sides with text, which suits a one-sided stack too.
-	if device.sources.iter().any(|source| source.kind == SourceKind::Feeder && source.duplex) {
-		sources.push(Source::FeederDuplex);
-	}
 	if device.sources.iter().any(|source| source.kind == SourceKind::Feeder) {
 		sources.push(Source::Feeder);
+	}
+	if device.sources.iter().any(|source| source.kind == SourceKind::Feeder && source.duplex) {
+		sources.push(Source::FeederDuplex);
 	}
 	ScannerInfo { id: device.id, name: device.name, sources, problem: device.error }
 }
@@ -111,7 +110,7 @@ mod tests {
 	#[test]
 	fn a_two_sided_feeder_offers_both_feeder_choices() {
 		let info = info(device(&[(SourceKind::Flatbed, false), (SourceKind::Feeder, true)]));
-		assert_eq!(info.sources, vec![Source::Flatbed, Source::FeederDuplex, Source::Feeder]);
+		assert_eq!(info.sources, vec![Source::Flatbed, Source::Feeder, Source::FeederDuplex]);
 	}
 
 	#[test]

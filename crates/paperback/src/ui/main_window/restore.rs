@@ -1,4 +1,9 @@
-use std::{cell::RefCell, path::Path, rc::Rc, sync::Mutex};
+use std::{
+	cell::RefCell,
+	path::{Path, PathBuf},
+	rc::Rc,
+	sync::Mutex,
+};
 
 use paperback_core::{config::ConfigManager, parser::is_remote_url};
 use wxdragon::prelude::*;
@@ -20,6 +25,8 @@ pub(super) fn schedule_restore_documents(
 ) {
 	let restore = config.lock().unwrap().get_app_bool("restore_previous_documents", true);
 	if !restore {
+		// Nothing will be reopened, so no scan in progress can be reached again.
+		crate::scanning::store::sweep(&[], &config.lock().unwrap());
 		return;
 	}
 	let state = Rc::new(Mutex::new(RestoreState::default()));
@@ -73,6 +80,11 @@ pub(super) fn schedule_restore_documents(
 		let (dm, cfg) = (Rc::clone(&doc_manager), Rc::clone(&config));
 		// After the links open, since opening them selects their tabs.
 		open_links_then(&frame, &doc_manager, &config, plan.links, move || {
+			let open: Vec<PathBuf> = dm.lock().unwrap().open_paths().into_iter().map(PathBuf::from).collect();
+			// Not while a scan is starting, whose archive has no tab until its first page.
+			if !crate::ui::scan_session::is_running() {
+				crate::scanning::store::sweep(&open, &cfg.lock().unwrap());
+			}
 			select_restored_tab(&dm, pre_restore_active, &active_path);
 			update_title_from_manager(&frame, &dm.lock().unwrap());
 			rebuild_menu_bar(&frame, &dm, &cfg);

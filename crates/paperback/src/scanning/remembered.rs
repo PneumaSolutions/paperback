@@ -14,8 +14,8 @@ pub struct Entry {
 	pub name: String,
 	pub sources: Vec<Source>,
 	pub settings: ScanSettings,
-	/// Both sides of every sheet are kept, blank or not, rather than only the sides with text.
-	pub keep_all_sides: bool,
+	/// A two-sided scan leaves out the sides with no text, rather than keeping every side.
+	pub skip_blank_sides: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -59,17 +59,17 @@ impl Remembered {
 		settings
 	}
 
-	pub fn remember(&mut self, scanner: &ScannerInfo, settings: ScanSettings, keep_all_sides: bool) {
+	pub fn remember(&mut self, scanner: &ScannerInfo, settings: ScanSettings, skip_blank_sides: bool) {
 		self.last = Some(scanner.id.clone());
 		self.scanners.insert(
 			scanner.id.clone(),
-			Entry { name: scanner.name.clone(), sources: scanner.sources.clone(), settings, keep_all_sides },
+			Entry { name: scanner.name.clone(), sources: scanner.sources.clone(), settings, skip_blank_sides },
 		);
 	}
 
 	#[must_use]
-	pub fn keep_all_sides(&self, scanner: &ScannerInfo) -> bool {
-		self.scanners.get(&scanner.id).is_some_and(|entry| entry.keep_all_sides)
+	pub fn skip_blank_sides(&self, scanner: &ScannerInfo) -> bool {
+		self.scanners.get(&scanner.id).is_some_and(|entry| entry.skip_blank_sides)
 	}
 
 	/// Anything unreadable is dropped rather than failing: the worst case is being asked to pick a scanner again.
@@ -99,7 +99,7 @@ impl Remembered {
 					"source": entry.settings.source.key(),
 					"dpi": entry.settings.dpi,
 					"color": color_key(entry.settings.color),
-					"keep_all_sides": entry.keep_all_sides,
+					"skip_blank_sides": entry.skip_blank_sides,
 				}),
 			);
 		}
@@ -124,8 +124,8 @@ fn entry_from(value: &Value) -> Option<Entry> {
 		.unwrap_or_else(|| ScanSettings::default().dpi);
 	let color =
 		if value.get("color").and_then(Value::as_str) == Some("color") { ColorMode::Color } else { ColorMode::Gray };
-	let keep_all_sides = value.get("keep_all_sides").and_then(Value::as_bool).unwrap_or(false);
-	Some(Entry { name, sources, settings: ScanSettings { source, dpi, color }, keep_all_sides })
+	let skip_blank_sides = value.get("skip_blank_sides").and_then(Value::as_bool).unwrap_or(false);
+	Some(Entry { name, sources, settings: ScanSettings { source, dpi, color }, skip_blank_sides })
 }
 
 const fn color_key(color: ColorMode) -> &'static str {
@@ -154,14 +154,14 @@ mod tests {
 		let remembered = Remembered::default();
 		let settings = remembered.settings_for(&scanner("a", vec![Source::Flatbed, Source::Feeder]));
 		assert_eq!(settings, ScanSettings { source: Source::Flatbed, dpi: 300, color: ColorMode::Gray });
-		let feeder_only = remembered.settings_for(&scanner("b", vec![Source::FeederDuplex, Source::Feeder]));
-		assert_eq!(feeder_only.source, Source::FeederDuplex, "a two-sided feeder defaults to both sides");
+		let feeder_only = remembered.settings_for(&scanner("b", vec![Source::Feeder, Source::FeederDuplex]));
+		assert_eq!(feeder_only.source, Source::Feeder, "a feeder defaults to one side; both sides is chosen");
 	}
 
 	#[test]
 	fn the_last_scanner_and_each_scanner_s_settings_survive_a_round_trip() {
 		let mut remembered = Remembered::default();
-		let first = scanner(r"SWD\Escl\{3ebf}", vec![Source::Flatbed, Source::FeederDuplex, Source::Feeder]);
+		let first = scanner(r"SWD\Escl\{3ebf}", vec![Source::Flatbed, Source::Feeder, Source::FeederDuplex]);
 		let second = scanner("test:0", vec![Source::Flatbed]);
 		remembered.remember(
 			&first,
@@ -174,8 +174,9 @@ mod tests {
 		assert_eq!(back.last_scanner().unwrap().id, "test:0");
 		let settings = back.settings_for(&first);
 		assert_eq!((settings.source, settings.dpi, settings.color), (Source::FeederDuplex, 200, ColorMode::Color));
-		assert!(back.keep_all_sides(&first));
-		assert!(!back.keep_all_sides(&second));
+		assert!(back.skip_blank_sides(&first));
+		assert!(!back.skip_blank_sides(&second));
+		assert!(!Remembered::default().skip_blank_sides(&first), "skipping blank sides is opt-in");
 	}
 
 	#[test]

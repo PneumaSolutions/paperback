@@ -133,10 +133,20 @@ pub(super) fn comic_document(pages: &[String], info: &ComicInfo, file_path: &str
 	let title = info.title.clone().unwrap_or_else(|| extract_title_from_path(file_path));
 	let mut document = Document::new().with_title(title).with_author(info.author.clone().unwrap_or_default());
 	let (buffer, toc_items) = build(pages, info);
+	// Each page gets an anchor, so a reload of an archive that has grown, as a scan does page by page, keeps the caret on its page rather than at a proportional guess.
+	let page_starts =
+		buffer.markers.iter().filter(|marker| marker.mtype == MarkerType::PageBreak).map(|marker| marker.position);
+	document.id_positions =
+		page_starts.enumerate().map(|(index, position)| (page_anchor(index + 1), position)).collect();
 	document.set_buffer(buffer);
 	document.toc_items = toc_items;
 	tracing::debug!(path = %file_path, "parsed comic archive successfully");
 	Ok(document)
+}
+
+#[must_use]
+pub fn page_anchor(page: usize) -> String {
+	format!("page-{page}")
 }
 
 /// Comic archives get renamed between `.cbz` and `.cbr` by people sorting their shelves, so the magic bytes decide.
@@ -352,6 +362,15 @@ mod tests {
 		let mut names = vec!["B.jpg".to_string(), "a.jpg".to_string()];
 		names.sort_by(|a, b| natural_cmp(a, b));
 		assert_eq!(names, ["a.jpg", "B.jpg"]);
+	}
+
+	#[test]
+	fn every_page_has_an_anchor_at_its_break() {
+		let pages = vec!["1.png".to_string(), "2.png".to_string()];
+		let document = comic_document(&pages, &ComicInfo::default(), "c.cbz").unwrap();
+		let first = document.id_positions[&page_anchor(1)];
+		let second = document.id_positions[&page_anchor(2)];
+		assert!(second > first);
 	}
 
 	#[test]

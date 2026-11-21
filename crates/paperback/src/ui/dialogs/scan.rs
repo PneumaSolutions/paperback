@@ -10,7 +10,7 @@ use super::{add_ok_cancel_footer, build_ok_cancel_buttons, dialog_padding};
 use crate::scanning::{messages, remembered::Remembered};
 
 pub enum SettingsChoice {
-	Scan { scanner: ScannerInfo, settings: ScanSettings, keep_all_sides: bool },
+	Scan { scanner: ScannerInfo, settings: ScanSettings, skip_blank_sides: bool },
 	FindScanners,
 	Cancel,
 }
@@ -63,8 +63,8 @@ pub fn show_scan_settings_dialog(
 		// TRANSLATORS: A scanning resolution; %d is the number of dots per inch
 		resolution_choice.append(&t("%d DPI").replacen("%d", &dpi.to_string(), 1));
 	}
-	// TRANSLATORS: Checkbox in the Scan Document dialog, for the document feeder scanning both sides: keep blank sides too, instead of only the sides with text
-	let keep_all_sides = CheckBox::builder(&dialog).with_label(&t("&Keep blank sides")).build();
+	// TRANSLATORS: Checkbox in the Scan Document dialog, for the document feeder scanning both sides: leave out the sides with no text on them
+	let skip_blank_sides = CheckBox::builder(&dialog).with_label(&t("S&kip blank sides")).build();
 	let sources_shown: Rc<RefCell<Vec<Source>>> = Rc::new(RefCell::new(Vec::new()));
 	let both_sides_chosen = {
 		let sources_shown = Rc::clone(&sources_shown);
@@ -89,15 +89,15 @@ pub fn show_scan_settings_dialog(
 			let selected = sources.iter().position(|source| *source == settings.source).unwrap_or(0);
 			source_choice.set_selection(u32::try_from(selected).unwrap_or(0));
 			*sources_shown.borrow_mut() = sources;
-			keep_all_sides.set_value(remembered.keep_all_sides(scanner));
-			keep_all_sides.enable(settings.source == Source::FeederDuplex);
+			skip_blank_sides.set_value(remembered.skip_blank_sides(scanner));
+			skip_blank_sides.enable(settings.source == Source::FeederDuplex);
 			color_choice.set_selection(u32::from(settings.color == ColorMode::Color));
 			let dpi = RESOLUTIONS.iter().position(|dpi| *dpi == settings.dpi).unwrap_or(2);
 			resolution_choice.set_selection(u32::try_from(dpi).unwrap_or(2));
 		}
 	};
 	show_settings(first);
-	source_choice.on_selection_changed(move |_| keep_all_sides.enable(both_sides_chosen()));
+	source_choice.on_selection_changed(move |_| skip_blank_sides.enable(both_sides_chosen()));
 	scanner_choice.on_selection_changed(move |event| {
 		if let Some(index) = event.get_selection().and_then(|index| usize::try_from(index).ok()) {
 			show_settings(index);
@@ -116,7 +116,7 @@ pub fn show_scan_settings_dialog(
 	}
 	let content = BoxSizer::builder(Orientation::Vertical).build();
 	content.add_sizer(&grid, 0, SizerFlag::Expand | SizerFlag::All, padding);
-	content.add(&keep_all_sides, 0, SizerFlag::Left | SizerFlag::Right | SizerFlag::Bottom, padding);
+	content.add(&skip_blank_sides, 0, SizerFlag::Left | SizerFlag::Right | SizerFlag::Bottom, padding);
 	if offer_find {
 		// TRANSLATORS: Button in the Scan Document dialog that lists every scanner again, to pick another one
 		let find = Button::builder(&dialog).with_id(ID_FIND_SCANNERS).with_label(&t("&Find Other Scanners...")).build();
@@ -147,7 +147,7 @@ pub fn show_scan_settings_dialog(
 			SettingsChoice::Scan {
 				scanner,
 				settings: ScanSettings { source, dpi, color },
-				keep_all_sides: source == Source::FeederDuplex && keep_all_sides.is_checked(),
+				skip_blank_sides: source == Source::FeederDuplex && skip_blank_sides.is_checked(),
 			}
 		}
 		ID_FIND_SCANNERS => SettingsChoice::FindScanners,
@@ -218,15 +218,15 @@ impl ScanningWindow {
 		live_region::announce(self.status, message);
 	}
 
-	/// Only the buttons that mean something now are shown, so Tab never lands on one that would do nothing.
-	pub fn show_buttons(&self, scanning: bool, asking: bool) {
+	/// Only the buttons that mean something now are shown, so Tab never lands on one that would do nothing. Rescan sits beside Scan Next Page for a page that may not be lined up, without taking Enter from it.
+	pub fn show_buttons(&self, scanning: bool, asking_blank: bool, can_rescan: bool) {
 		self.stop.show(scanning);
-		self.next.show(!scanning && !asking);
-		self.rescan.show(!scanning && asking);
-		self.skip.show(!scanning && asking);
+		self.next.show(!scanning && !asking_blank);
+		self.rescan.show(!scanning && (asking_blank || can_rescan));
+		self.skip.show(!scanning && asking_blank);
 		let focus = if scanning {
 			self.stop
-		} else if asking {
+		} else if asking_blank {
 			self.rescan
 		} else {
 			self.next
@@ -235,4 +235,74 @@ impl ScanningWindow {
 		self.dialog.layout();
 		focus.set_focus();
 	}
+}
+
+/// What to do with a scan in progress that is being closed.
+pub enum CloseChoice {
+	Save,
+	Discard,
+	Cancel,
+}
+
+const ID_DISCARD: i32 = ID_HIGHEST + 6;
+
+pub fn ask_to_save_scan(parent: &dyn WxWidget, title: &str) -> CloseChoice {
+	// TRANSLATORS: Title of the question asked when a scanned document that hasn't been saved is closed
+	let dialog = Dialog::builder(parent, &t("Save Scan")).build();
+	let _destroy = super::DestroyOnDrop(dialog);
+	let padding = dialog_padding(&dialog);
+	// TRANSLATORS: Asked when a scanned document that hasn't been saved is closed; %s is its title. Closing without saving deletes it.
+	let message =
+		t("%s hasn't been saved. Save it before closing? If you don't, the scan is deleted.").replacen("%s", title, 1);
+	let label = StaticText::builder(&dialog).with_label(&message).build();
+	label.wrap(420);
+	// TRANSLATORS: Button that saves a scanned document before closing it
+	let save = Button::builder(&dialog).with_id(ID_OK).with_label(&t("&Save...")).build();
+	// TRANSLATORS: Button that closes a scanned document without saving it, deleting it
+	let discard = Button::builder(&dialog).with_id(ID_DISCARD).with_label(&t("&Don't Save")).build();
+	// TRANSLATORS: Label for the cancellation button
+	let cancel = Button::builder(&dialog).with_id(ID_CANCEL).with_label(&t("Cancel")).build();
+	discard.on_click(move |_| dialog.end_modal(ID_DISCARD));
+	dialog.set_escape_id(ID_CANCEL);
+	dialog.set_affirmative_id(ID_OK);
+	save.set_default();
+	let buttons = BoxSizer::builder(Orientation::Horizontal).build();
+	for button in [save, discard, cancel] {
+		buttons.add(&button, 0, SizerFlag::Right, padding / 2);
+	}
+	let content = BoxSizer::builder(Orientation::Vertical).build();
+	content.add(&label, 0, SizerFlag::All, padding);
+	content.add_sizer(&buttons, 0, SizerFlag::All | SizerFlag::AlignRight, padding);
+	dialog.set_sizer_and_fit(content, true);
+	dialog.centre();
+	save.set_focus();
+	match dialog.show_modal() {
+		ID_OK => CloseChoice::Save,
+		ID_DISCARD => CloseChoice::Discard,
+		_ => CloseChoice::Cancel,
+	}
+}
+
+/// Where to save a scan, as a comic book archive, which is what it is.
+pub fn choose_save_path(parent: &dyn WxWidget, title: &str) -> Option<std::path::PathBuf> {
+	// TRANSLATORS: Title of the file picker for saving a scanned document
+	let caption = t("Save Scan As");
+	// TRANSLATORS: File type in the Save Scan As file picker; keep the (*.cbz) and the |*.cbz after it as they are
+	let wildcard = t("Comic book archives (*.cbz)|*.cbz");
+	let dialog = FileDialog::builder(parent)
+		.with_message(&caption)
+		.with_default_file(&format!("{title}.cbz"))
+		.with_wildcard(&wildcard)
+		.with_style(FileDialogStyle::Save | FileDialogStyle::OverwritePrompt)
+		.build();
+	if dialog.show_modal() != ID_OK {
+		return None;
+	}
+	let path = std::path::PathBuf::from(dialog.get_path()?);
+	// The archive is a comic book archive whatever the reader typed, so Paperback and other readers know it.
+	Some(if path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("cbz")) {
+		path
+	} else {
+		path.with_extension("cbz")
+	})
 }

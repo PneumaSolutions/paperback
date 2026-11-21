@@ -1,9 +1,10 @@
-//! Scanned pages are kept as PNG files in a zip, the `.pbscan` format, which [`crate::parser::scan`] reads like a comic archive.
+//! Scanned pages are kept as PNG files in a comic book archive (`.cbz`), so the comic parser and renderer read them, and any comic reader can open one.
+//! A `ComicInfo.xml` names the scan and marks it as Paperback's with `ScanInformation`, which is how a scan's OCR lines are told apart from a comic's balloons and joined into paragraphs.
 //! Every change writes a whole new archive beside the old one and renames it over it, so a reader opening the file mid-scan, or a crash mid-write, never sees half a page.
 
 use std::{
 	fs::{self, File},
-	io::{self, BufReader, BufWriter, Cursor, Write as _},
+	io::{self, BufReader, BufWriter, Cursor, Read as _, Write as _},
 	path::{Path, PathBuf},
 };
 
@@ -13,32 +14,57 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 use crate::parser::cbz::page_names;
 
-pub const EXTENSION: &str = "pbscan";
+pub const EXTENSION: &str = "cbz";
+
+/// The `ComicInfo.xml` field that says who scanned an archive.
+const SCANNED_BY: &str = "<ScanInformation>Paperback</ScanInformation>";
 
 /// Far past any feeder's capacity; the name keeps a natural sort even past it, but a limit stops a runaway driver filling the disk.
 pub const MAXIMUM_PAGES: usize = 9999;
 
 pub struct ScanArchive {
 	path: PathBuf,
+	title: String,
 }
 
 impl ScanArchive {
-	/// Picks a name in `dir` that no file has yet, `name.pbscan` or `name 2.pbscan` and so on. Nothing is written until the first page.
+	/// Picks a name in `dir` that no file has yet, `name.cbz` or `name 2.cbz` and so on, which is also the document's title. Nothing is written until the first page.
 	pub fn create(dir: &Path, name: &str) -> io::Result<Self> {
 		create_private_dir(dir)?;
 		let stem = sanitize(name);
 		let mut path = dir.join(format!("{stem}.{EXTENSION}"));
 		let mut counter = 2;
+		let mut title = stem.clone();
 		while path.exists() {
-			path = dir.join(format!("{stem} {counter}.{EXTENSION}"));
+			title = format!("{stem} {counter}");
+			path = dir.join(format!("{title}.{EXTENSION}"));
 			counter += 1;
 		}
-		Ok(Self { path })
+		Ok(Self { path, title })
 	}
 
 	#[must_use]
 	pub fn open(path: &Path) -> Self {
-		Self { path: path.to_path_buf() }
+		let title = path.file_stem().map(|stem| stem.to_string_lossy().into_owned()).unwrap_or_default();
+		Self { path: path.to_path_buf(), title }
+	}
+
+	/// A copy at `destination` titled `title`, for Save Scan As. The pages are copied as they are; only the title changes.
+	pub fn copy_to(&self, destination: &Path, title: &str) -> Result<Self> {
+		let copy = Self { path: destination.to_path_buf(), title: title.to_string() };
+		let mut archive = self.read()?;
+		let dir = destination.parent().unwrap_or_else(|| Path::new("."));
+		let temp = tempfile::Builder::new().prefix(".scan-").suffix(".tmp").tempfile_in(dir)?;
+		let mut writer = ZipWriter::new(BufWriter::new(temp));
+		copy.write_info(&mut writer)?;
+		for index in 0..archive.len() {
+			let entry = archive.by_index_raw(index)?;
+			if !entry.name().is_ok_and(|name| is_info(&name)) {
+				writer.raw_copy_file(entry)?;
+			}
+		}
+		finish(writer, destination)?;
+		Ok(copy)
 	}
 
 	#[must_use]
@@ -93,6 +119,9 @@ impl ScanArchive {
 		// PNG is compressed already, so deflating it again only costs time.
 		let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
 		let mut added = added;
+		if !self.path.exists() {
+			self.write_info(&mut writer)?;
+		}
 		if self.path.exists() {
 			let mut archive = self.read()?;
 			for index in 0..archive.len() {
@@ -112,11 +141,49 @@ impl ScanArchive {
 			writer.start_file(name, options)?;
 			writer.write_all(png)?;
 		}
-		let temp = writer.finish()?.into_inner().map_err(io::IntoInnerError::into_error)?;
-		temp.as_file().sync_all()?;
-		temp.persist(&self.path).map_err(|error| error.error)?;
+		finish(writer, &self.path)
+	}
+
+	fn write_info(&self, writer: &mut ZipWriter<BufWriter<tempfile::NamedTempFile>>) -> Result<()> {
+		writer.start_file("ComicInfo.xml", SimpleFileOptions::default())?;
+		let info = format!(
+			"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<ComicInfo>\n\t<Title>{}</Title>\n\t{SCANNED_BY}\n</ComicInfo>\n",
+			escape_xml(&self.title)
+		);
+		writer.write_all(info.as_bytes())?;
 		Ok(())
 	}
+}
+
+fn finish(writer: ZipWriter<BufWriter<tempfile::NamedTempFile>>, destination: &Path) -> Result<()> {
+	let temp = writer.finish()?.into_inner().map_err(io::IntoInnerError::into_error)?;
+	temp.as_file().sync_all()?;
+	temp.persist(destination).map_err(|error| error.error)?;
+	Ok(())
+}
+
+fn is_info(name: &str) -> bool {
+	name.eq_ignore_ascii_case("ComicInfo.xml")
+}
+
+fn escape_xml(text: &str) -> String {
+	text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+}
+
+/// Whether a comic archive is a scan Paperback made, whose OCR lines are prose to be joined into paragraphs.
+#[must_use]
+pub fn is_scan(path: &Path) -> bool {
+	let Ok(file) = File::open(path) else { return false };
+	let Ok(mut archive) = ZipArchive::new(BufReader::new(file)) else { return false };
+	let Some(name) =
+		archive.file_names().filter_map(Result::ok).find(|name| is_info(name)).map(std::borrow::Cow::into_owned)
+	else {
+		return false;
+	};
+	let Ok(entry) = archive.by_name(&name) else { return false };
+	let mut info = String::new();
+	// The marker is near the start; a huge ComicInfo is no scan of ours.
+	io::Read::take(entry, 64 * 1024).read_to_string(&mut info).is_ok() && info.contains(SCANNED_BY)
 }
 
 pub fn encode_png(page: &DynamicImage) -> Result<Vec<u8>> {
@@ -152,6 +219,7 @@ fn create_private_dir(dir: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::{document::ParseSettings, session::DocumentSession};
 
 	fn page(width: u32) -> DynamicImage {
 		DynamicImage::new_luma8(width, 3)
@@ -201,7 +269,7 @@ mod tests {
 		first.append_page(&page(1)).unwrap();
 		let second = ScanArchive::create(dir.path(), "Scan").unwrap();
 		assert_ne!(first.path(), second.path());
-		assert!(second.path().to_string_lossy().ends_with("Scan 2.pbscan"));
+		assert!(second.path().to_string_lossy().ends_with("Scan 2.cbz"));
 	}
 
 	#[test]
@@ -221,7 +289,50 @@ mod tests {
 			.unwrap()
 			.map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
 			.collect();
-		assert_eq!(names, vec!["Scan.pbscan".to_string()]);
+		assert_eq!(names, vec!["Scan.cbz".to_string()]);
+	}
+
+	#[test]
+	fn a_scan_opens_as_a_comic_with_its_title_and_one_placeholder_per_page() {
+		let dir = tempfile::tempdir().unwrap();
+		let archive = ScanArchive::create(dir.path(), "Letter <draft>").unwrap();
+		archive.append_page(&page(8)).unwrap();
+		archive.append_page(&page(9)).unwrap();
+		let path = archive.path().to_string_lossy().into_owned();
+		let session = DocumentSession::new(&path, "", "", ParseSettings::default()).unwrap();
+		assert_eq!(session.image_only_pages().len(), 2);
+		assert_eq!(session.page_count(), 2);
+		assert_eq!(session.title(), "Letter -draft-");
+		assert!(is_scan(archive.path()));
+	}
+
+	#[test]
+	fn a_comic_that_paperback_did_not_scan_is_not_a_scan() {
+		let dir = tempfile::tempdir().unwrap();
+		let path = dir.path().join("comic.cbz");
+		let mut zip = ZipWriter::new(File::create(&path).unwrap());
+		zip.start_file("ComicInfo.xml", SimpleFileOptions::default()).unwrap();
+		zip.write_all(b"<ComicInfo><Title>Night Patrol</Title><ScanInformation>someone</ScanInformation></ComicInfo>")
+			.unwrap();
+		zip.start_file("001.png", SimpleFileOptions::default()).unwrap();
+		zip.write_all(&encode_png(&page(2)).unwrap()).unwrap();
+		zip.finish().unwrap();
+		assert!(!is_scan(&path));
+		assert!(!is_scan(&dir.path().join("missing.cbz")));
+	}
+
+	#[test]
+	fn a_copy_keeps_the_pages_and_takes_the_new_title() {
+		let dir = tempfile::tempdir().unwrap();
+		let archive = ScanArchive::create(dir.path(), "Scan").unwrap();
+		archive.append_page(&page(3)).unwrap();
+		archive.append_page(&page(4)).unwrap();
+		let saved = archive.copy_to(&dir.path().join("Bank letter.cbz"), "Bank & letter").unwrap();
+		assert_eq!(widths(&saved), vec![3, 4]);
+		assert!(is_scan(saved.path()));
+		let path = saved.path().to_string_lossy().into_owned();
+		assert_eq!(DocumentSession::new(&path, "", "", ParseSettings::default()).unwrap().title(), "Bank & letter");
+		assert!(archive.path().exists(), "the original is left for the caller to discard");
 	}
 
 	#[cfg(unix)]

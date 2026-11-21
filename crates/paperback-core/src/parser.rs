@@ -49,7 +49,6 @@ pub mod qrd;
 pub mod rar;
 pub mod rst;
 pub mod rtf;
-pub mod scan;
 pub mod text;
 pub mod util;
 pub mod word;
@@ -153,7 +152,6 @@ impl ParserRegistry {
 				CBR => cbr::CbrParser,
 				RAR => rar::RarParser,
 				CBZ => cbz::CbzParser,
-				SCAN => scan::ScanParser,
 				CHM => chm::ChmParser,
 				HLP => hlp::HlpParser,
 				OS2_HELP => ipf::IpfParser,

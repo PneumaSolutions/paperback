@@ -6,7 +6,7 @@ use std::{
 	cell::RefCell,
 	collections::BTreeMap,
 	fs,
-	path::PathBuf,
+	path::{Path, PathBuf},
 	rc::Rc,
 	sync::{Arc, Mutex, mpsc},
 	thread,
@@ -14,6 +14,7 @@ use std::{
 
 use paperback_core::{
 	config::ConfigManager,
+	document::DocPos,
 	ocr::{RecognizedLine, save_pages, saved_pages_file},
 	scan::{
 		archive::{ScanArchive, encode_png},
@@ -29,19 +30,19 @@ use wx_utils::{
 use wxdragon::prelude::*;
 
 use crate::{
-	config_ext::config_dir,
 	ocr::{self, OcrError},
 	scanning::{
 		messages,
 		pages::{self, Mode},
 		remembered::Remembered,
+		store,
 	},
 	ui::{
-		dialogs::scan::{ScanningWindow, SettingsChoice, show_scan_settings_dialog},
-		document_manager::DocumentManager,
+		dialogs::scan::{ScanningWindow, SettingsChoice, choose_save_path, show_scan_settings_dialog},
+		document_manager::{DocumentManager, display_title},
 		main_window::{MainWindow, update_title_from_manager},
 		menu,
-		navigation::announce,
+		navigation::{announce, announce_for_command},
 	},
 };
 
@@ -58,15 +59,6 @@ struct Shared {
 	scanner: Arc<dyn Scanner>,
 }
 
-/// A question the Scanning window is waiting on, about the page scanned last.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Asking {
-	/// Not added: probably face down.
-	Blank,
-	/// Added, but it may be out of line; Rescan replaces it.
-	Alignment(usize),
-}
-
 struct Session {
 	shared: Shared,
 	window: Option<ScanningWindow>,
@@ -79,7 +71,10 @@ struct Session {
 	/// Named for the archive's contents, so it changes with every page; the old one is removed.
 	cache: Option<PathBuf>,
 	running: bool,
-	asking: Option<Asking>,
+	/// The flatbed page came out blank, probably face down, and the window waits for Rescan or Skip.
+	asking_blank: bool,
+	/// A flatbed page that may not be lined up. Rescan replaces it; scanning the next page goes on without it.
+	rescan: Option<usize>,
 	run_pages: usize,
 	run_blanks: usize,
 	run_dropped: usize,
@@ -170,29 +165,30 @@ fn find_scanners(shared: Shared) {
 
 fn choose(shared: &Shared, scanners: &[ScannerInfo], remembered: &Remembered, offer_find: bool) {
 	match show_scan_settings_dialog(&shared.frame, scanners, remembered, offer_find) {
-		SettingsChoice::Scan { scanner, settings, keep_all_sides } => {
-			begin(shared.clone(), &scanner, settings, keep_all_sides);
+		SettingsChoice::Scan { scanner, settings, skip_blank_sides } => {
+			begin(shared.clone(), &scanner, settings, skip_blank_sides);
 		}
 		SettingsChoice::FindScanners => find_scanners(shared.clone()),
 		SettingsChoice::Cancel => {}
 	}
 }
 
-fn begin(shared: Shared, scanner: &ScannerInfo, settings: ScanSettings, keep_all_sides: bool) {
+fn begin(shared: Shared, scanner: &ScannerInfo, settings: ScanSettings, skip_blank_sides: bool) {
 	{
 		let config = shared.config.lock().unwrap();
 		let mut remembered = Remembered::load(&config);
-		remembered.remember(scanner, settings, keep_all_sides);
+		remembered.remember(scanner, settings, skip_blank_sides);
 		remembered.save(&config);
 	}
+	// Skipping is opt-in: OCR finds no words in a photo, a signature or handwriting, and those sides are worth keeping.
 	let mode = match settings.source {
 		Source::Flatbed => Mode::Flatbed,
 		Source::Feeder => Mode::Feeder,
-		Source::FeederDuplex if keep_all_sides => Mode::BothSidesAll,
-		Source::FeederDuplex => Mode::BothSidesSmart,
+		Source::FeederDuplex if skip_blank_sides => Mode::BothSidesSmart,
+		Source::FeederDuplex => Mode::BothSidesAll,
 	};
 	// TRANSLATORS: The name a new scanned document is saved under, before a number when there are several
-	let archive = match ScanArchive::create(&config_dir().join("scans"), &t("Scan")) {
+	let archive = match ScanArchive::create(&store::scans_dir(), &t("Scan")) {
 		Ok(archive) => archive,
 		Err(error) => {
 			tracing::warn!(%error, "could not make the folder for scanned documents");
@@ -220,7 +216,8 @@ fn begin(shared: Shared, scanner: &ScannerInfo, settings: ScanSettings, keep_all
 		recognized: BTreeMap::new(),
 		cache: None,
 		running: false,
-		asking: None,
+		asking_blank: false,
+		rescan: None,
 		run_pages: 0,
 		run_blanks: 0,
 		run_dropped: 0,
@@ -234,33 +231,52 @@ fn begin(shared: Shared, scanner: &ScannerInfo, settings: ScanSettings, keep_all
 }
 
 fn bind_buttons(window: ScanningWindow) {
-	// A hidden button's mnemonic can still reach it, so each acts only while its question is open.
+	// A hidden button's mnemonic can still reach it, so each acts only when it's shown.
 	window.rescan.on_click(move |_| {
-		let Some(asking) = with_session(|session| session.asking.take()).flatten() else { return };
-		start_run(match asking {
-			Asking::Alignment(number) => Some(number),
-			Asking::Blank => None,
+		let target = with_session(|session| {
+			if session.running {
+				return None;
+			}
+			if std::mem::take(&mut session.asking_blank) {
+				return Some(None);
+			}
+			session.rescan.take().map(Some)
 		});
+		if let Some(Some(replace)) = target {
+			start_run(replace);
+		}
 	});
 	window.skip.on_click(move |_| {
 		with_session(|session| {
-			if session.asking.take().is_none() {
+			if !std::mem::take(&mut session.asking_blank) {
 				return;
 			}
+			session.show_buttons();
 			if let Some(window) = session.window {
-				window.show_buttons(false, false);
 				window.say(&messages::flatbed_prompt());
 			}
 		});
 	});
 	window.next.on_click(move |_| {
-		if with_session(|session| session.asking.is_none()).unwrap_or(false) {
+		let go = with_session(|session| {
+			let go = !session.running && !session.asking_blank;
+			if go {
+				session.rescan = None;
+			}
+			go
+		});
+		if go == Some(true) {
 			start_run(None);
 		}
 	});
 	window.stop.on_click(move |_| {
 		with_session(|session| session.shared.scanner.cancel());
 	});
+}
+
+/// Whether a scan is running or its Scanning window is open.
+pub fn is_running() -> bool {
+	SESSION.with_borrow(Option::is_some)
 }
 
 fn with_session<T>(action: impl FnOnce(&mut Session) -> T) -> Option<T> {
@@ -274,12 +290,13 @@ fn start_run(replace: Option<usize>) {
 			return None;
 		}
 		session.running = true;
-		session.asking = None;
+		session.asking_blank = false;
+		session.rescan = None;
 		session.run_pages = 0;
 		session.run_blanks = 0;
 		session.run_dropped = 0;
+		session.show_buttons();
 		if let Some(window) = session.window {
-			window.show_buttons(true, false);
 			window.say(&messages::scanning());
 		}
 		Some((
@@ -431,7 +448,17 @@ impl Session {
 		self.settings.source.is_feeder()
 	}
 
+	fn show_buttons(&self) {
+		if let Some(window) = self.window {
+			window.show_buttons(self.running, self.asking_blank, self.rescan.is_some());
+		}
+	}
+
 	fn apply(&mut self, window: &'static MainWindow, event: Event) {
+		// Closed without saving, and so deleted: what's still coming has nowhere to go, and must not bring the scan back.
+		if self.pages > 0 && !self.archive.path().exists() {
+			return;
+		}
 		match event {
 			Event::Added { number, png, replaces } => {
 				let stored = if replaces {
@@ -475,10 +502,12 @@ impl Session {
 					message = format!("{message} {}", ocr::message(&error));
 				}
 				if let Some(cut_off) = out_of_line {
+					// Said without stopping: Enter still scans the next page, and Rescan is there for this one.
 					let can_rescan = !self.feeder() && self.window.is_some();
 					message = format!("{message} {}", messages::not_lined_up(cut_off, can_rescan));
 					if can_rescan {
-						self.asking = Some(Asking::Alignment(number));
+						self.rescan = Some(number);
+						self.show_buttons();
 					}
 				} else if !self.feeder() && self.pages == 1 {
 					message = format!("{message} {}", messages::flatbed_prompt());
@@ -491,16 +520,13 @@ impl Session {
 					self.run_blanks += 1;
 					self.say(&messages::blank_left_out(), true);
 				} else {
-					self.asking = Some(Asking::Blank);
+					self.asking_blank = true;
 					self.say(&messages::blank_on_flatbed(self.pages + 1), false);
 				}
 			}
 			Event::Ended(summary) => {
 				self.running = false;
-				let asking = self.asking.is_some();
-				if let Some(window) = self.window {
-					window.show_buttons(false, asking);
-				}
+				self.show_buttons();
 				match summary.error {
 					Some(error) if self.feeder() && error.kind == ErrorKind::Other && self.run_pages > 0 => {
 						// A feeder that jams after some pages keeps them; say both.
@@ -575,6 +601,58 @@ impl Session {
 			window.dialog.raise();
 		}
 	}
+}
+
+/// File > Save Scan As. A scan in progress is replaced by the saved copy, which then opens where the reader was; a scan saved before is copied.
+pub fn save_scan_as(frame: Frame, dm: &Rc<Mutex<DocumentManager>>, label: StaticText, from_keyboard: bool) {
+	let Some((source, document_title, position)) = dm.lock().unwrap().active_tab().map(|tab| {
+		(tab.local_path().to_path_buf(), display_title(tab), tab.window.to_doc(tab.text_ctrl.get_insertion_point()))
+	}) else {
+		return;
+	};
+	if !paperback_core::scan::archive::is_scan(&source) {
+		// TRANSLATORS: Announced when Save Scan As is chosen in a document that wasn't scanned with Paperback
+		announce_for_command(label, from_keyboard, t("Save Scan As is for scanned documents."));
+		return;
+	}
+	let Some(destination) = choose_save_path(&frame, &document_title) else { return };
+	if let Err(error) = save_to(dm, &source, &destination, position) {
+		show_error(&frame, error, &title());
+		return;
+	}
+	update_title_from_manager(&frame, &dm.lock().unwrap());
+	let name = destination.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+	// TRANSLATORS: Announced after a scanned document is saved; %s is the file name it was saved as
+	announce(label, t("Saved as %s.").replacen("%s", &name, 1));
+}
+
+/// Saves `source` as `destination`; a scan in progress is then discarded and the saved copy opened in its place, at `position`.
+pub(crate) fn save_to(
+	dm: &Rc<Mutex<DocumentManager>>,
+	source: &Path,
+	destination: &Path,
+	position: DocPos,
+) -> Result<(), String> {
+	if store::same_file(source, destination) {
+		return Ok(());
+	}
+	store::save_copy(source, destination).map_err(|error| {
+		tracing::warn!(%error, "could not save a scan");
+		// TRANSLATORS: Shown when a scanned document can't be saved; %s is the reason
+		t("The scan could not be saved: %s").replacen("%s", &error.to_string(), 1)
+	})?;
+	if !store::is_in_progress(source) {
+		return Ok(());
+	}
+	let mut manager = dm.lock().unwrap();
+	if let Some(index) = manager.find_tab_by_path(source) {
+		manager.close_document_without_asking(index, false);
+	}
+	store::discard(source, &manager.config.lock().unwrap());
+	if manager.open_file(dm, destination) {
+		manager.place_caret(position);
+	}
+	Ok(())
 }
 
 /// The Scanning window has closed: a scan still running is stopped, and the reader is taken to the document.

@@ -1,6 +1,6 @@
 use std::{cell::Cell, path::Path, rc::Rc, sync::Mutex, time::Instant};
 
-use paperback_core::{parser::PASSWORD_REQUIRED_ERROR_PREFIX, session::DocumentSession};
+use paperback_core::{document::DocPos, parser::PASSWORD_REQUIRED_ERROR_PREFIX, session::DocumentSession};
 use patois::t;
 use wxdragon::prelude::*;
 
@@ -13,6 +13,7 @@ use crate::{
 	audio_player::AudioPlayer,
 	shell,
 	ui::{
+		dialogs::scan::{CloseChoice, ask_to_save_scan, choose_save_path},
 		readability::{
 			apply_bg_color_to_ctrl, apply_foreground_color_to_ctrl, apply_readability_format_to_ctrl,
 			build_font_from_readability,
@@ -251,7 +252,48 @@ impl DocumentManager {
 		true
 	}
 
+	/// A scan in progress is deleted when closed, so the reader is asked first whether to save it; false if they cancelled.
 	pub fn close_document(&mut self, index: usize, save_state: bool) -> bool {
+		let Some(tab) = self.tabs.get(index) else {
+			return false;
+		};
+		let path = tab.local_path().to_path_buf();
+		if !crate::scanning::store::is_in_progress(&path) || !path.exists() {
+			return self.close_document_without_asking(index, save_state);
+		}
+		let title = super::display_title(tab);
+		let position = tab.window.to_doc(tab.text_ctrl.get_insertion_point());
+		match ask_to_save_scan(&self.notebook, &title) {
+			CloseChoice::Cancel => false,
+			CloseChoice::Save => {
+				let Some(destination) = choose_save_path(&self.notebook, &title) else {
+					return false;
+				};
+				let title_path = destination.clone();
+				if let Err(error) = crate::scanning::store::save_copy(&path, &destination) {
+					// TRANSLATORS: Shown when a scanned document can't be saved; %s is the reason
+					let message = t("The scan could not be saved: %s").replacen("%s", &error.to_string(), 1);
+					show_error_dialog(&self.notebook, &message, &t("Error"));
+					return false;
+				}
+				tracing::info!(path = %title_path.display(), at = position.get(), "saved a scan before closing it");
+				self.discard_scan(index, &path)
+			}
+			CloseChoice::Discard => self.discard_scan(index, &path),
+		}
+	}
+
+	fn discard_scan(&mut self, index: usize, path: &Path) -> bool {
+		let closed = self.close_document_without_asking(index, false);
+		// Reopen Last Closed would only find it gone.
+		if self.recently_closed.last().is_some_and(|last| last == path) {
+			self.recently_closed.pop();
+		}
+		crate::scanning::store::discard(path, &self.config.lock().unwrap());
+		closed
+	}
+
+	pub fn close_document_without_asking(&mut self, index: usize, save_state: bool) -> bool {
 		if index >= self.tabs.len() {
 			return false;
 		}
@@ -309,11 +351,24 @@ impl DocumentManager {
 
 	pub fn close_all_documents(&mut self) {
 		while !self.tabs.is_empty() {
-			self.close_document(0, true);
+			// Cancelled for a scan the reader didn't want to lose: the rest stay open with it.
+			if !self.close_document(0, true) {
+				return;
+			}
 		}
 		let config = self.config.lock().unwrap();
 		config.clear_opened_documents();
 		config.flush();
+	}
+
+	/// After a document is reopened, as when a saved scan replaces the one in progress.
+	pub fn place_caret(&self, position: DocPos) {
+		if let Some(tab) = self.active_tab() {
+			let position = position.min(tab.session.document_len().as_pos());
+			let local = tab.window.to_local(position);
+			tab.text_ctrl.set_insertion_point(local);
+			tab.text_ctrl.show_position(local);
+		}
 	}
 
 	pub fn save_all_positions(&self) {

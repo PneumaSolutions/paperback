@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: paperback 1.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-21 14:12-0700\n"
+"POT-Creation-Date: 2026-11-21 13:17-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -221,8 +221,7 @@ msgstr ""
 msgid "Only a little text was found, so the page might not be lined up."
 msgstr ""
 
-#. TRANSLATORS: Said after a flatbed page that might not be lined up; Rescan and Skip are buttons
-msgid "Straighten it and choose Rescan, or choose Skip to keep it as it is."
+msgid "To scan it again, straighten it and choose Rescan. Otherwise press Enter to go on to the next page."
 msgstr ""
 
 #. TRANSLATORS: Said when a page scanned from the flatbed has nothing on it; %d is the page number it would have been
@@ -507,6 +506,14 @@ msgstr ""
 
 #. TRANSLATORS: Status-bar help text for the File > Scan Document menu item.
 msgid "Scan pages from a scanner and read them"
+msgstr ""
+
+#. TRANSLATORS: Menu item in the File menu to save a scanned document somewhere to keep it
+msgid "Sa&ve Scan As..."
+msgstr ""
+
+#. TRANSLATORS: Status-bar help text for the File > Save Scan As menu item.
+msgid "Save the scanned document to keep it"
 msgstr ""
 
 #. TRANSLATORS: Menu item in the File menu to close the current document.
@@ -1537,10 +1544,6 @@ msgstr ""
 msgid "Play Sa&mple"
 msgstr ""
 
-#. TRANSLATORS: Button on the Audio tab of Settings that opens the speech dictionary, which changes how words are read aloud
-msgid "Speech &Dictionary..."
-msgstr ""
-
 #. TRANSLATORS: First choice in the voice list on the Audio tab of Settings, which leaves the choice of voice to the system
 msgid "System default"
 msgstr ""
@@ -1661,112 +1664,6 @@ msgstr ""
 msgid "&Reading speed (words per minute):"
 msgstr ""
 
-#. TRANSLATORS: Title of the speech dictionary dialog, opened from the Read Aloud group on the Audio tab of Settings
-msgid "Speech Dictionary"
-msgstr ""
-
-#. TRANSLATORS: Label of the list of speech dictionary rules, which are applied in order and can each be turned on or off
-msgid "&Rules:"
-msgstr ""
-
-#. TRANSLATORS: Said of a speech dictionary rule that is on
-msgid "on"
-msgstr ""
-
-#. TRANSLATORS: Said of a speech dictionary rule that is off
-msgid "off"
-msgstr ""
-
-#. TRANSLATORS: Button in the speech dictionary dialog that adds a rule
-msgid "&Add..."
-msgstr ""
-
-#. TRANSLATORS: Button in the speech dictionary dialog that edits the current rule
-msgid "&Edit..."
-msgstr ""
-
-#. TRANSLATORS: Button in the speech dictionary dialog that removes the current rule
-msgid "Re&move"
-msgstr ""
-
-#. TRANSLATORS: In the speech dictionary's list, the replacement of a rule that removes what it finds
-msgid "removed"
-msgstr ""
-
-#. TRANSLATORS: In the speech dictionary's list, a rule that matches whole words only
-msgid "whole words"
-msgstr ""
-
-#. TRANSLATORS: In the speech dictionary's list, a rule that matches inside words too
-msgid "words"
-msgstr ""
-
-#. TRANSLATORS: In the speech dictionary's list, a rule that matches a regular expression across a paragraph
-msgid "paragraphs, regular expression"
-msgstr ""
-
-#. TRANSLATORS: In the speech dictionary's list, a rule that matches text across a paragraph
-msgid "paragraphs"
-msgstr ""
-
-#. TRANSLATORS: In the speech dictionary, a rule that applies to every voice
-msgid "all voices"
-msgstr ""
-
-#. TRANSLATORS: Title of the dialog that adds a speech dictionary rule
-msgid "Add Rule"
-msgstr ""
-
-#. TRANSLATORS: Title of the dialog that edits a speech dictionary rule
-msgid "Edit Rule"
-msgstr ""
-
-#. TRANSLATORS: Label of the text a speech dictionary rule matches, or its regular expression
-msgid "&Pattern:"
-msgstr ""
-
-msgid "&Replacement:"
-msgstr ""
-
-#. TRANSLATORS: Label of the choice between a rule matching words and one matching across a whole paragraph
-msgid "&Applies to:"
-msgstr ""
-
-#. TRANSLATORS: Speech dictionary rule scope: the rule matches words
-msgid "Words"
-msgstr ""
-
-#. TRANSLATORS: Speech dictionary rule scope: the rule matches across a whole paragraph, and can be a regular expression
-msgid "Whole paragraphs"
-msgstr ""
-
-#. TRANSLATORS: Label of the choice of voices a speech dictionary rule applies to
-msgid "&Voices:"
-msgstr ""
-
-#. TRANSLATORS: First choice of voices for a speech dictionary rule
-msgid "All voices"
-msgstr ""
-
-#. TRANSLATORS: A choice of voices for a speech dictionary rule: every voice of one language; %s is the language
-msgid "Voices in %s"
-msgstr ""
-
-#. TRANSLATORS: Check box: a word rule matches only whole words, not part of a longer word
-msgid "Match &whole words only"
-msgstr ""
-
-#. TRANSLATORS: Check box: a paragraph rule's pattern is a regular expression, whose groups the replacement can use as \1
-msgid "Regular e&xpression"
-msgstr ""
-
-#. TRANSLATORS: Shown when a speech dictionary rule is saved without a pattern
-msgid "Type a pattern for the rule."
-msgstr ""
-
-msgid "The regular expression isn't valid: %s"
-msgstr ""
-
 #. TRANSLATORS: Title of the Settings dialog
 msgid "Settings"
 msgstr ""
@@ -1833,8 +1730,8 @@ msgstr ""
 msgid "%d DPI"
 msgstr ""
 
-#. TRANSLATORS: Checkbox in the Scan Document dialog, for the document feeder scanning both sides: keep blank sides too, instead of only the sides with text
-msgid "&Keep blank sides"
+#. TRANSLATORS: Checkbox in the Scan Document dialog, for the document feeder scanning both sides: leave out the sides with no text on them
+msgid "S&kip blank sides"
 msgstr ""
 
 #. TRANSLATORS: Button in the Scan Document dialog that lists every scanner again, to pick another one
@@ -1871,6 +1768,29 @@ msgstr ""
 
 #. TRANSLATORS: Button in the Scanning window that closes it and goes to the scanned document
 msgid "&Done"
+msgstr ""
+
+#. TRANSLATORS: Title of the question asked when a scanned document that hasn't been saved is closed
+msgid "Save Scan"
+msgstr ""
+
+msgid "%s hasn't been saved. Save it before closing? If you don't, the scan is deleted."
+msgstr ""
+
+#. TRANSLATORS: Button that saves a scanned document before closing it
+msgid "&Save..."
+msgstr ""
+
+#. TRANSLATORS: Button that closes a scanned document without saving it, deleting it
+msgid "&Don't Save"
+msgstr ""
+
+#. TRANSLATORS: Title of the file picker for saving a scanned document
+msgid "Save Scan As"
+msgstr ""
+
+#. TRANSLATORS: File type in the Save Scan As file picker; keep the (*.cbz) and the |*.cbz after it as they are
+msgid "Comic book archives (*.cbz)|*.cbz"
 msgstr ""
 
 msgid "System-Wide"
@@ -1967,6 +1887,10 @@ msgstr ""
 
 #. TRANSLATORS: Error shown when the user dismisses the password prompt for an encrypted document without entering one
 msgid "Password is required."
+msgstr ""
+
+#. TRANSLATORS: Shown when a scanned document can't be saved; %s is the reason
+msgid "The scan could not be saved: %s"
 msgstr ""
 
 #. TRANSLATORS: Label for the password entry field in the "Document Password" prompt dialog
@@ -2964,6 +2888,14 @@ msgstr ""
 msgid "Scan"
 msgstr ""
 
+#. TRANSLATORS: Announced when Save Scan As is chosen in a document that wasn't scanned with Paperback
+msgid "Save Scan As is for scanned documents."
+msgstr ""
+
+#. TRANSLATORS: Announced after a scanned document is saved; %s is the file name it was saved as
+msgid "Saved as %s."
+msgstr ""
+
 #. TRANSLATORS: Announced after text is copied, with Ctrl+C or from the marked beginning of a selection. The %d placeholder is replaced with the number of characters copied. Plural form is chosen by that count.
 msgid "%d character copied."
 msgid_plural "%d characters copied."
@@ -3033,6 +2965,10 @@ msgstr ""
 
 #. TRANSLATORS: Name of this keyboard-shortcut action, shown in the Customize Keyboard Shortcuts dialog (its list of assignable actions, and the "Set Shortcut for {}" / conflict-reassignment prompts).
 msgid "Scan Document..."
+msgstr ""
+
+#. TRANSLATORS: Name of this keyboard-shortcut action, shown in the Customize Keyboard Shortcuts dialog (its list of assignable actions, and the "Set Shortcut for {}" / conflict-reassignment prompts).
+msgid "Save Scan As..."
 msgstr ""
 
 #. TRANSLATORS: Name of this keyboard-shortcut action, shown in the Customize Keyboard Shortcuts dialog (its list of assignable actions, and the "Set Shortcut for {}" / conflict-reassignment prompts).
@@ -3759,14 +3695,6 @@ msgstr ""
 msgid "Failed to parse RTF document: {}"
 msgstr ""
 
-#. TRANSLATORS: Error shown when a scanned document (.pbscan) cannot be opened; {} is the underlying error
-msgid "Failed to open scanned document: {}"
-msgstr ""
-
-#. TRANSLATORS: Error shown when a scanned document holds no page images
-msgid "This scanned document contains no pages."
-msgstr ""
-
 #. TRANSLATORS: Fallback label for an audiobook chapter whose embedded title is empty; {} is the chapter number
 msgid "Chapter {}"
 msgstr ""
@@ -4304,7 +4232,6 @@ msgstr ""
 msgid "Locate"
 msgstr ""
 
-#. TRANSLATORS: Button confirming removal of a bookmark and its note
 #: kt
 #: swift
 msgid "Remove"
@@ -4357,6 +4284,11 @@ msgstr ""
 #: kt
 #: swift
 msgid "Pitch"
+msgstr ""
+
+#. TRANSLATORS: Row label navigating to the custom speech pronunciation dictionary
+#: swift
+msgid "Speech Dictionary"
 msgstr ""
 
 #: kt
@@ -4414,6 +4346,12 @@ msgstr ""
 #: kt
 #: swift
 msgid "Author"
+msgstr ""
+
+#. TRANSLATORS: Row label for the document's total word count
+#: kt
+#: swift
+msgid "Words"
 msgstr ""
 
 #. TRANSLATORS: Row label for the document's total line count
@@ -4552,10 +4490,19 @@ msgstr ""
 msgid "New Rule"
 msgstr ""
 
-#. TRANSLATORS: Button that saves what was typed and closes the editor, such as a speech rule or a bookmark's note
-#: kt
+#. TRANSLATORS: Navigation title shown when creating a new text-substitution rule vs. editing an existing one
+#: swift
+msgid "Edit Rule"
+msgstr ""
+
+#. TRANSLATORS: Button to save the rule and dismiss the editor
 #: swift
 msgid "Save"
+msgstr ""
+
+#. TRANSLATORS: Row label for selecting all TTS voices as the target of a rule, rather than a specific language or voice
+#: swift
+msgid "All voices"
 msgstr ""
 
 #. TRANSLATORS: Navigation title for the screen where the user picks which voices a rule applies to
@@ -4605,6 +4552,11 @@ msgstr ""
 #. TRANSLATORS: Button that starts the sleep timer with the selected duration, or stops it if one is already running
 #: swift
 msgid "Start Timer"
+msgstr ""
+
+#. TRANSLATORS: Accessibility label for the "+" button that adds a new speech dictionary rule
+#: swift
+msgid "Add Rule"
 msgstr ""
 
 #. TRANSLATORS: Message shown when no speech dictionary rules have been created yet
@@ -4846,6 +4798,14 @@ msgstr ""
 #: swift
 #: kt
 msgid "This document contains {} words."
+msgstr ""
+
+#. TRANSLATORS: Unit label shown under the large word-count number. Which of the
+#. three forms is used depends on the target language's own plural rule, read
+#. from its catalogue (see nt() in Translations.kt). The "many" form's trailing
+#. character isn't a typo — see PLURAL_MANY_MARKER in Translations.kt.
+#: kt
+msgid "words"
 msgstr ""
 
 #. TRANSLATORS: Accessibility action on a text line to dismiss the in-document search
@@ -5498,112 +5458,4 @@ msgstr ""
 #: kt
 #: swift
 msgid "Show chapter progress"
-msgstr ""
-
-#. TRANSLATORS: Name of the "Bookmark" navigation unit, which moves between the reader's bookmarks and notes
-#: kt
-#: swift
-msgid "Bookmark"
-msgstr ""
-
-#. TRANSLATORS: Announced after clearing a bookmark's note, which keeps the bookmark
-#: kt
-#: swift
-msgid "Note deleted."
-msgstr ""
-
-#. TRANSLATORS: VoiceOver label for the note shown under the passage being read; {} is the note's text
-#: kt
-#: swift
-msgid "Note: {}"
-msgstr ""
-
-#. TRANSLATORS: VoiceOver action on a paragraph in text mode that marks or unmarks it with a bookmark
-#: kt
-#: swift
-msgid "Add Bookmark"
-msgstr ""
-
-#. TRANSLATORS: VoiceOver action on a paragraph in text mode that marks or unmarks it with a bookmark
-#: kt
-#: swift
-msgid "Remove Bookmark"
-msgstr ""
-
-#. TRANSLATORS: VoiceOver value of the bookmark button when the bookmark at the current paragraph has a note
-#: kt
-#: swift
-msgid "Has note"
-msgstr ""
-
-#. TRANSLATORS: Title of the alert confirming removal of a bookmark that has a note
-#: kt
-#: swift
-msgid "Remove this bookmark and its note?"
-msgstr ""
-
-#. TRANSLATORS: Menu item / accessibility action to write a note on the current bookmark, or to change the one it has
-#: kt
-#: swift
-msgid "Edit Note..."
-msgstr ""
-
-#. TRANSLATORS: Menu item / accessibility action to write a note on the current bookmark, or to change the one it has
-#: kt
-#: swift
-msgid "Add Note..."
-msgstr ""
-
-#. TRANSLATORS: Label for the picker choosing whether the Bookmarks screen shows everything, only bookmarks, or only notes
-#: swift
-msgid "Show"
-msgstr ""
-
-#. TRANSLATORS: Swipe / accessibility action deleting a bookmark from the Bookmarks screen
-#: kt
-#: swift
-msgid "Delete"
-msgstr ""
-
-#. TRANSLATORS: Title shown when the current document has no bookmarks or notes
-#: kt
-#: swift
-msgid "No Bookmarks"
-msgstr ""
-
-#. TRANSLATORS: Description shown under the "No Bookmarks" title
-#: kt
-#: swift
-msgid "Tap the bookmark button while reading to mark your place."
-msgstr ""
-
-#. TRANSLATORS: VoiceOver hint on the note shown under the passage being read
-#: swift
-msgid "Double-tap to edit."
-msgstr ""
-
-#. TRANSLATORS: Heading over the passage (or audiobook time) a bookmark note is attached to
-#: swift
-msgid "Bookmarked"
-msgstr ""
-
-#. TRANSLATORS: Heading over the text field where a bookmark's note is typed
-#: swift
-msgid "Note"
-msgstr ""
-
-#. TRANSLATORS: Button that clears a bookmark's note but keeps the bookmark
-#: kt
-#: swift
-msgid "Delete Note"
-msgstr ""
-
-#. TRANSLATORS: TalkBack action label for a long press on the bookmark button, which opens its note and list options
-#: kt
-msgid "show note and bookmark options"
-msgstr ""
-
-#. TRANSLATORS: TalkBack action label for a bookmark in the Bookmarks screen, read as "double tap to go to bookmark"
-#: kt
-msgid "go to bookmark"
 msgstr ""
