@@ -21,6 +21,7 @@ Paperback runs on Windows 10/11, all the modern versions of ARM macOS, Linux, iO
 * Supports a massive array of common file formats.
 * Plays audio books, with adjustable speed and bookmarks that remember the exact time.
 * Reads scanned PDF pages with the OCR built into Windows and macOS, or with Tesseract on Linux.
+* Scans paper documents from a flatbed or document feeder scanner, saying each step out loud, and reads them with OCR.
 * Bookmarks and notes, so you can mark your place and come back to it.
 * Every keyboard shortcut can be changed.
 * Opens documents straight from http and https links, and downloads them again when you reopen them or press `F5`, keeping your reading position and bookmarks. When restoring the documents you had open, it downloads again the ones from links that were 2 MB or smaller.
@@ -65,6 +66,7 @@ Paperback supports the following formats and extensions:
 * OpenDocument presentations (`.odp`, `.fodp`)
 * OpenDocument text files (`.odt`, `.fodt`)
 * OS/2 help files and books, with their pictures (`.inf`, `.hlp`)
+* Paperback scanned documents, made with File > Scan Document (`.pbscan`)
 * PDF documents (`.pdf`)
 * Qt help files, the documentation Qt Assistant and Qt Creator read, such as Qt's and CMake's own (`.qch`)
 * QRead books, the copies QRead saved of each book it opened (`.qrd`)
@@ -76,6 +78,51 @@ Paperback supports the following formats and extensions:
 * WinHelp files (`.hlp`)
 * XPS and OpenXPS documents (`.xps`, `.oxps`)
 * Plain text and log files (`.txt`, `.log`)
+
+## Scanning documents
+
+File > Scan Document scans paper with your scanner and opens it as a document you can read, search and export. Paperback uses your system's own scanning support: Windows Image Acquisition on Windows, Image Capture on macOS, and SANE on Linux. Network scanners that work with your system's own scanning app work here too, with no extra drivers. No scanner window ever appears: Paperback speaks each step instead.
+
+### Choosing a scanner
+
+The first time, Paperback looks for scanners, which can take a few seconds, and lists them. After that it uses the scanner you used last, so a scan is one menu item and one press of Enter. To use a different scanner, choose Find Other Scanners in the Scan Document dialog.
+
+In the Scan Document dialog you choose:
+
+* Source: Flatbed (the glass), Document feeder, both sides, or Document feeder, one side. Only the sources your scanner has are listed.
+* Color: Grayscale, the default, or Color. OCR reads grayscale as well as color, and grayscale pages are a third of the size.
+* Resolution: 300 DPI by default, which is what OCR works best at. Not every scanner offers every resolution; if yours doesn't, Paperback says so.
+* Keep blank sides, for the document feeder scanning both sides. See below.
+
+Paperback remembers these settings for each scanner separately.
+
+### Scanning from the flatbed
+
+Put a page face down on the glass and choose Scan. Paperback scans it, opens the document, reads the page with OCR and tells you the page number and how many words it found, for example "Page 1: 245 words." Then put the next page on the glass and press Enter to scan it, or press Escape to finish. When you finish, you're taken to the document, at the first page.
+
+### Scanning from the document feeder
+
+Load the pages and choose Scan. Paperback scans them all and announces each page as its text is read. When the feeder is empty it tells you how many pages it scanned. To scan more pages into the same document, load them and press Enter; press Escape to finish.
+
+With Document feeder, both sides, Paperback scans the front and back of every sheet and keeps only the sides with real text on them, so a stack printed on one side comes out as just its printed pages, whichever way up you loaded it, while pages printed on both sides keep both. It decides by the words OCR finds on a side, not by how dark it looks, so show-through from the other side of thin paper doesn't count as text. Only the pages it keeps are announced, and at the end it sums up, for example "5 sheets, 7 pages, 3 blank sides skipped." To keep every side, blank or not, check Keep blank sides. To scan one side only, choose Document feeder, one side.
+
+The document opens after the first page, and each page's text appears as soon as it has been read, so you can start reading while later pages are still being scanned or read.
+
+### When a page needs attention
+
+Paperback tells you, in plain words, when something about a page looks wrong:
+
+* A page upside down or sideways is turned the right way up automatically, and Paperback says so briefly, for example "Page 3 was upside down; corrected." You don't need to do anything.
+* A blank page is usually one placed face down. On the flatbed, Paperback asks you to turn it over and choose Rescan, or choose Skip to leave it out. From the one-sided document feeder, blank pages are left out, and at the end Paperback tells you how many, since they might have been face down.
+* Very little text, or text that touches the edge of the scan, can mean the page isn't lined up. On the flatbed, Paperback offers to scan it again: straighten it and choose Rescan, or choose Skip to keep it as it is. From the document feeder it tells you which page it was.
+
+Rescan and Skip are offered only for these two cases, blank pages and pages that may not be lined up.
+
+### Saving what you scanned
+
+A scanned document is kept in the `scans` folder in Paperback's settings folder, and appears in Recent Documents like any other document. File > Reveal File in Folder shows it. To save its text, use File > Export to Plain Text or Export to Markdown. The text Paperback read is kept with the document, so reopening it doesn't run OCR again; to read a page again, use Recognize Current Page (`Ctrl+Shift+R`).
+
+On Linux, scanning needs SANE: install `sane-utils`, and `sane-airscan` for network scanners, from your package manager. If SANE isn't installed, Paperback says so.
 
 ## Keyboard shortcuts
 
@@ -89,6 +136,7 @@ Punctuation shortcuts are named after the keys of a US keyboard. On another layo
 
 * `Ctrl+O`: Open a document.
 * `Ctrl+L` (macOS: `Cmd+Option+O`): Open a document from a web link.
+* Scan Document has no shortcut of its own; you can give it one in Customize Keyboard Shortcuts.
 * `Ctrl+F4` (macOS: `Cmd+W`): Close the current document.
 * `Ctrl+Shift+F4` (macOS: `Cmd+Shift+W`): Close all open documents.
 * `Ctrl+Shift+T`: Reopen the last closed document.
