@@ -879,10 +879,7 @@ impl Session {
 				match *parsed {
 					Ok(document) => {
 						let dm = Rc::clone(&self.shared.dm);
-						let shown = dm.lock().unwrap().show_parsed_scan(&self.path, document);
-						if shown {
-							self.refocus_window();
-						}
+						self.keeping_focus(|| dm.lock().unwrap().show_parsed_scan(&self.path, document));
 					}
 					Err(error) => tracing::warn!(%error, "could not re-read the scan"),
 				}
@@ -1046,13 +1043,21 @@ impl Session {
 		}
 	}
 
-	/// Opening a tab can take the focus from the Scanning window, which still has the reader's next step.
-	fn refocus_window(&self) {
-		if let Some(window) = self.window {
+	/// Runs `change`, which can take the focus from the Scanning window by opening or re-reading the scan's tab, and gives it back to the button that had it. Focus that never left the window, or was already elsewhere, stays put, since a screen reader announces every focus change.
+	fn keeping_focus<T>(&self, change: impl FnOnce() -> T) -> T {
+		let before = self.window.and_then(|window| window.focused_button());
+		let result = change();
+		if let (Some(window), Some(button)) = (self.window, before)
+			&& window.focused_button().is_none()
+		{
 			window.dialog.raise();
-			// Raising the window doesn't give a button the keyboard focus back.
-			self.show_buttons_focusing(true);
+			if button.is_shown() {
+				button.set_focus();
+			} else {
+				self.show_buttons_focusing(true);
+			}
 		}
+		result
 	}
 
 	/// The tab shows what's arrived. The first page opens it here; after that the re-read is parsed on a thread of its own and put in the tab when it's ready ([`Event::Parsed`]).
@@ -1065,10 +1070,10 @@ impl Session {
 			self.dirty = false;
 			let dm = Rc::clone(&self.shared.dm);
 			// Not while the OCR thread is part way through adding a page.
-			let shown = {
+			let shown = self.keeping_focus(|| {
 				let _writing = self.archive.lock().unwrap();
 				dm.lock().unwrap().open_scan(&dm, &self.path)
-			};
+			});
 			if shown {
 				self.opened = true;
 				let manager = dm.lock().unwrap();
@@ -1078,7 +1083,6 @@ impl Session {
 				self.shared.frame.set_menu_bar(menu_bar);
 				menu::update_menu_item_states(&self.shared.frame, true);
 			}
-			self.refocus_window();
 			return;
 		}
 		if self.parsing {

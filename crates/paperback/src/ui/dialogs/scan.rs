@@ -250,7 +250,7 @@ impl ScanningWindow {
 		}
 	}
 
-	fn focused_button(&self) -> Option<Button> {
+	pub fn focused_button(&self) -> Option<Button> {
 		[self.next, self.rescan, self.skip, self.stop, self.done].into_iter().find(WxWidget::has_focus)
 	}
 }
