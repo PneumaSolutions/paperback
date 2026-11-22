@@ -96,6 +96,10 @@ struct Run {
 	cancelled_at: Mutex<Option<Instant>>,
 	/// The scanner thread has returned.
 	scanner_ended: AtomicBool,
+	/// When the scanner last handed over a page or got one back, or the run started.
+	last_heard: Mutex<Option<Instant>>,
+	/// A page is with Paperback, which may wait on OCR: the scanner can't be blamed for that time.
+	in_page: AtomicBool,
 	/// The watchdog gave up on a scanner thread that never returned.
 	abandoned: AtomicBool,
 }
@@ -105,11 +109,20 @@ impl Run {
 		self.cancelled_at.lock().unwrap().get_or_insert_with(Instant::now);
 	}
 
-	/// Whether the run should be ended without its scanner thread: it hasn't returned long after a cancel, or long after the scan's own timeout.
-	fn overdue(&self, started: Instant) -> bool {
+	fn heard(&self) {
+		*self.last_heard.lock().unwrap() = Some(Instant::now());
+	}
+
+	/// Whether the run should be ended without its scanner thread: it hasn't returned long after a cancel, or the scanner has been silent, outside a page Paperback is holding, long past pagescan's own inactivity timeout.
+	fn overdue(&self) -> bool {
+		let silent = self
+			.last_heard
+			.lock()
+			.unwrap()
+			.is_some_and(|at| at.elapsed() > crate::scanning::scanner::TIMEOUT + GIVE_UP_AFTER_CANCEL);
 		!self.scanner_ended.load(Ordering::Acquire)
 			&& (self.cancelled_at.lock().unwrap().is_some_and(|at| at.elapsed() > GIVE_UP_AFTER_CANCEL)
-				|| started.elapsed() > crate::scanning::scanner::TIMEOUT + GIVE_UP_AFTER_CANCEL)
+				|| (!self.in_page.load(Ordering::Acquire) && silent))
 	}
 }
 
@@ -513,11 +526,11 @@ fn start_run() {
 	}
 	{
 		let run = Arc::clone(&run);
-		let started = Instant::now();
+		run.heard();
 		let watchdog = thread::Builder::new().name("paperback-scan-watchdog".into()).spawn(move || {
 			while !run.scanner_ended.load(Ordering::Acquire) {
 				thread::sleep(Duration::from_secs(1));
-				if run.overdue(started) {
+				if run.overdue() {
 					tracing::warn!("the scanner never returned; ending the run without it");
 					run.abandoned.store(true, Ordering::Release);
 					return;
@@ -531,6 +544,7 @@ fn start_run() {
 	let main_thread = scanner.needs_main_thread();
 	let scan = move || {
 		let summary = scanner.scan(&scanner_id, settings, &mut |page| {
+			run.in_page.store(true, Ordering::Release);
 			run.scanned.fetch_add(1, Ordering::AcqRel);
 			// Encoded here, while the driver goes on with the next page in its own thread (or its own buffers, for SANE).
 			let message = match encode_png(&page) {
@@ -543,6 +557,8 @@ fn start_run() {
 			drop(page);
 			// Waits while OCR is behind, which makes the scanner wait too.
 			let _ = to_ocr.send(message);
+			run.heard();
+			run.in_page.store(false, Ordering::Release);
 		});
 		run.scanner_ended.store(true, Ordering::Release);
 		let _ = to_ocr.send(ToOcr::End(summary));
@@ -1580,12 +1596,26 @@ mod tests {
 	#[test]
 	fn the_watchdog_waits_for_a_cancel_or_the_timeout() {
 		let run = Run::default();
-		let started = Instant::now();
-		assert!(!run.overdue(started));
+		run.heard();
+		assert!(!run.overdue());
 		*run.cancelled_at.lock().unwrap() = Instant::now().checked_sub(GIVE_UP_AFTER_CANCEL + Duration::from_secs(1));
-		assert!(run.overdue(started));
+		assert!(run.overdue());
 		run.scanner_ended.store(true, Ordering::Release);
-		assert!(!run.overdue(started), "a scanner that returned is never given up on");
+		assert!(!run.overdue(), "a scanner that returned is never given up on");
+	}
+
+	#[test]
+	fn the_timeout_counts_silence_from_the_scanner_not_the_length_of_the_run() {
+		let run = Run::default();
+		let long_ago = Instant::now()
+			.checked_sub(crate::scanning::scanner::TIMEOUT + GIVE_UP_AFTER_CANCEL + Duration::from_secs(1));
+		*run.last_heard.lock().unwrap() = long_ago;
+		run.in_page.store(true, Ordering::Release);
+		assert!(!run.overdue(), "time a page spends waiting on OCR isn't the scanner's");
+		run.in_page.store(false, Ordering::Release);
+		assert!(run.overdue(), "a scanner silent past the timeout is given up on");
+		run.heard();
+		assert!(!run.overdue(), "a page just handed over starts the count again");
 	}
 
 	#[test]

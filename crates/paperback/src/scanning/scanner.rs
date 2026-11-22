@@ -125,5 +125,5 @@ pub trait Scanner: Send + Sync {
 	}
 }
 
-/// A scan has to end some time even if the driver never says so. pagescan holds to it even when a driver stops responding (it gives up on the driver about 30 seconds later, keeping the pages so far), and Paperback's own watchdog ends the run if even that doesn't happen.
+/// How long a driver may go without delivering anything before the scan ends; time Paperback spends on a page doesn't count. pagescan gives up on a silent driver about 30 seconds after this, keeping the pages so far, and Paperback's own watchdog ends the run if even that doesn't happen.
 pub const TIMEOUT: Duration = Duration::from_mins(15);
