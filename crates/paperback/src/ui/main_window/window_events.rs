@@ -167,10 +167,9 @@ pub(super) fn bind_teardown(
 			"closing the main window"
 		);
 		// Pages still being read into a scan would be lost; the ones already added are kept either way.
-		if crate::ui::scan_session::is_busy()
-			&& let WindowEventData::General(ref ev) = event
+		if let WindowEventData::General(ref ev) = event
 			&& ev.can_veto()
-			&& !wx_utils::confirm(&frame, crate::scanning::messages::quit_while_scanning(), &t("Scan Document"))
+			&& !crate::ui::scan_session::confirm_quit(&frame)
 		{
 			ev.veto();
 			return;
@@ -203,6 +202,7 @@ pub(super) fn bind_teardown(
 			return;
 		}
 		// Only once really quitting: on macOS the window is only hidden above, and its documents stay open.
+		crate::ui::scan_session::stop_for_quit();
 		tracing::info!("removing working copies");
 		dm.remove_working_copies();
 		// Here rather than only after the event loop, since Windows may end the process once it has closed the window at shutdown.

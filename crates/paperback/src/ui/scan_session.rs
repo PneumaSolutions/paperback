@@ -446,6 +446,16 @@ pub fn is_running() -> bool {
 	SESSION.with(|slot| slot.try_borrow().map_or(true, |session| session.is_some()))
 }
 
+/// Before quitting while pages are still being scanned or read: whether to go ahead. The pages already added are kept either way.
+pub fn confirm_quit(parent: &dyn WxWidget) -> bool {
+	!is_busy() || wx_utils::confirm(parent, messages::quit_while_scanning(), &title())
+}
+
+/// Quitting: the scanner is told to stop, so a driver isn't left feeding pages to nothing.
+pub fn stop_for_quit() {
+	with_session(|session| session.cancel_run());
+}
+
 /// Whether a run still owns an archive: pages are being scanned or read into it.
 pub fn is_busy() -> bool {
 	SESSION.with(|slot| slot.try_borrow().map_or(true, |session| session.as_ref().is_some_and(|s| s.run.is_some())))

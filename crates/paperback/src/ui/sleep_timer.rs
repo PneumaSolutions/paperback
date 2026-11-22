@@ -58,8 +58,11 @@ impl SleepTimer {
 			if now_ms() < deadline_ms {
 				return;
 			}
-			// A modal dialog holding either lock would block the close handler forever, so wait for it to go.
-			if dm_for_tick.try_lock().is_err() || config_for_tick.try_lock().is_err() {
+			// A modal dialog holding either lock would block the close handler forever, so wait for it to go. Nobody is there to answer whether to stop a scan, so wait for that too.
+			if dm_for_tick.try_lock().is_err()
+				|| config_for_tick.try_lock().is_err()
+				|| crate::ui::scan_session::is_busy()
+			{
 				timer_for_tick.start(1000, true);
 				return;
 			}

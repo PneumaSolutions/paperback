@@ -59,7 +59,10 @@ fn create_tray(
 	}
 	let icon = builder.build(&frame);
 	icon.on_exit(move || {
-		frame.close(true);
+		// A forced close skips the close handler's question, so it's asked here.
+		if crate::ui::scan_session::confirm_quit(&frame) {
+			frame.close(true);
+		}
 	});
 	icon
 }
