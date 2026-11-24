@@ -107,15 +107,11 @@ mod tests {
 	use super::*;
 
 	fn device(sources: &[(SourceKind, bool)]) -> pagescan::Device {
-		pagescan::Device {
-			id: "id".into(),
-			name: "Scanner".into(),
-			sources: sources
-				.iter()
-				.map(|(kind, duplex)| pagescan::Source { id: "x".into(), kind: *kind, duplex: *duplex })
-				.collect(),
-			error: None,
-		}
+		pagescan::Device::new(
+			"id",
+			"Scanner",
+			sources.iter().map(|(kind, duplex)| pagescan::Source::new("x", *kind, *duplex)).collect(),
+		)
 	}
 
 	#[test]

@@ -23,7 +23,7 @@ mailbag-wx = "0.1.0"
 native-ocr = { workspace = true }
 # pagescan is Pneuma Solutions' scanner library: WIA on Windows, ImageCaptureCore on macOS, SANE (loaded at run time) on Linux.
 # TODO: switch to the crates.io release once pagescan is published; the repository is private until then.
-pagescan = { git = "https://github.com/PneumaSolutions/pagescan", rev = "176d31b9d5a18bd801c1e5e73809de1121a7e7fa" }
+pagescan = { git = "https://github.com/PneumaSolutions/pagescan", rev = "0d116aaa5a02c1ae8503aaf5775e71cac60eb4d6" }
 paperback-core = { workspace = true, features = ["fetch"] }
 paperback-formats = { workspace = true }
 patois = { workspace = true, features = ["wx"] }
